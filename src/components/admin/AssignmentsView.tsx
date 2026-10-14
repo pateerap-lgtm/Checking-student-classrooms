@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { CalendarCheck, Plus, Edit2, Trash2, User, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { TeachingAssignment, AppUser, Classroom, Subject, Period, DayOfWeek, AcademicYear } from '../../types';
 
@@ -50,7 +50,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   // Form states
   const [teacherUsername, setTeacherUsername] = useState(teachers[0]?.username || '');
   const [classId, setClassId] = useState(classes[0]?.id || '');
-  const [subjectId, setSubjectId] = useState(subjects[0]?.id || '');
+  const [subjectId, setSubjectId] = useState('');
   const [periodId, setPeriodId] = useState(periods.find((p) => !p.isLunchBreak)?.id || '');
   const [dayOfWeek, setDayOfWeek] = useState<DayOfWeek>('จันทร์');
   const [color, setColor] = useState('#0C7C82');
@@ -59,20 +59,38 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   // Available teaching periods (excluding lunch break)
   const teachingPeriods = periods.filter((p) => !p.isLunchBreak);
 
-  // Filter subjects by selected classroom
-  const selectedClass = classes.find((c) => c.id === classId);
-  const classSubjects = subjects.filter(
-    (s) => s.classId === classId || (selectedClass && s.className === selectedClass.name)
-  );
+  // Filter subjects STRICTLY by selected classroom
+  const selectedClass = classes.find((c) => c.id === classId || c.name === classId);
+  const classSubjects = useMemo(() => {
+    if (!classId) return [];
+    return subjects.filter(
+      (s) => (s.classId && s.classId === classId) ||
+             (selectedClass && (s.classId === selectedClass.id || s.className === selectedClass.name))
+    );
+  }, [subjects, classId, selectedClass]);
 
+  // Handle classroom selection change: immediately recalculate subjects and set the first one
   const handleClassChange = (newClassId: string) => {
     setClassId(newClassId);
-    const targetClass = classes.find((c) => c.id === newClassId);
+    const targetClass = classes.find((c) => c.id === newClassId || c.name === newClassId);
     const availableSubs = subjects.filter(
-      (s) => s.classId === newClassId || (targetClass && s.className === targetClass.name)
+      (s) => (s.classId && s.classId === newClassId) ||
+             (targetClass && (s.classId === targetClass.id || s.className === targetClass.name))
     );
     setSubjectId(availableSubs[0]?.id || '');
   };
+
+  // Ensure subjectId is always valid for the selected classroom when modal is open
+  useEffect(() => {
+    if (isModalOpen && classSubjects.length > 0) {
+      const isValid = classSubjects.some((s) => s.id === subjectId || s.code === subjectId);
+      if (!isValid) {
+        setSubjectId(classSubjects[0].id);
+      }
+    } else if (isModalOpen && classSubjects.length === 0) {
+      setSubjectId('');
+    }
+  }, [isModalOpen, classSubjects, subjectId]);
 
   const openAddModal = () => {
     if (teachers.length === 0) {
@@ -92,10 +110,11 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
       return;
     }
 
-    const initialClassId = classes[0]?.id || '';
     const initialClass = classes[0];
+    const initialClassId = initialClass.id;
     const initialClassSubs = subjects.filter(
-      (s) => s.classId === initialClassId || (initialClass && s.className === initialClass.name)
+      (s) => (s.classId && s.classId === initialClassId) ||
+             (initialClass && (s.classId === initialClass.id || s.className === initialClass.name))
     );
 
     setEditingAssignment(null);

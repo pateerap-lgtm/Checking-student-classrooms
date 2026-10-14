@@ -665,7 +665,7 @@ export default function App() {
         />
 
         {/* Dynamic Main View Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full pb-28 lg:pb-12">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full pb-28 lg:pb-12 print:p-0 print:m-0 print:max-w-none print:w-full">
           {isLoading ? (
             <div className="space-y-6">
               <CardSkeleton count={4} />
@@ -824,11 +824,16 @@ export default function App() {
                   {currentTab === 'report' && (
                     <TeacherReportView
                       attendanceLogs={attendanceLogs.filter((l) => l.teacherUsername === currentUser.username)}
+                      assignments={assignments.filter((a) => a.teacherUsername === currentUser.username)}
                       classes={classes}
                       subjects={subjects}
+                      students={students}
                       settings={settings}
+                      teacherUsername={currentUser.username}
                       teacherFullName={currentUser.fullName}
                       activeYear={activeYear}
+                      onUpdateAttendance={handleUpdateAttendance}
+                      onSaveAttendance={handleSaveAttendance}
                     />
                   )}
                   {currentTab === 'profile' && (

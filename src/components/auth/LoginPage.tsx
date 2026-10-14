@@ -110,7 +110,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mb-2 leading-tight">
-              {settings.schoolName || 'โรงเรียนอนุบาลหนองหานวิทยายน'}
+              {settings.schoolName || 'โรงเรียนอนุบาลศรีสุทโธ'}
             </h1>
             <p className="text-sm text-teal-100 leading-relaxed font-light">
               {settings.affiliationName || 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษาอุดรธานี เขต 3'}

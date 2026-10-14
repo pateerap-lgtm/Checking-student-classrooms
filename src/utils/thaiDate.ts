@@ -67,3 +67,85 @@ export function getTodayISODate(): string {
   const day = String(now.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
+export interface YearMonthOption {
+  key: string; // "YYYY-MM"
+  label: string; // "ตุลาคม 2569"
+  year: number;
+  monthIndex: number;
+  yearBE: number;
+}
+
+export function getAcademicYearMonths(activeYear?: {
+  term1Start?: string;
+  term1End?: string;
+  term2Start?: string;
+  term2End?: string;
+  name?: string;
+}): YearMonthOption[] {
+  const results: YearMonthOption[] = [];
+  const seen = new Set<string>();
+
+  const addRange = (startStr?: string, endStr?: string) => {
+    if (!startStr || !endStr) return;
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
+
+    const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+    const last = new Date(end.getFullYear(), end.getMonth(), 1);
+
+    while (cur <= last) {
+      const y = cur.getFullYear();
+      const m = cur.getMonth();
+      const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+
+      if (!seen.has(key)) {
+        seen.add(key);
+        const yearBE = y + 543;
+        results.push({
+          key,
+          label: `${THAI_MONTHS_FULL[m]} ${yearBE}`,
+          year: y,
+          monthIndex: m,
+          yearBE
+        });
+      }
+      cur.setMonth(cur.getMonth() + 1);
+    }
+  };
+
+  if (activeYear?.term1Start && activeYear?.term1End) {
+    addRange(activeYear.term1Start, activeYear.term1End);
+  }
+  if (activeYear?.term2Start && activeYear?.term2End) {
+    addRange(activeYear.term2Start, activeYear.term2End);
+  }
+  if (results.length === 0 && activeYear?.term1Start && activeYear?.term2End) {
+    addRange(activeYear.term1Start, activeYear.term2End);
+  }
+
+  // Fallback to 12 months of the academic year or current year
+  if (results.length === 0) {
+    const baseYearBE = activeYear?.name && !isNaN(Number(activeYear.name))
+      ? Number(activeYear.name)
+      : new Date().getFullYear() + 543;
+    const baseYearCE = baseYearBE - 543;
+
+    // Academic year in Thailand usually starts in May (month 4) and ends in March or April next year
+    // or standard calendar months:
+    for (let m = 0; m < 12; m++) {
+      const key = `${baseYearCE}-${String(m + 1).padStart(2, '0')}`;
+      results.push({
+        key,
+        label: `${THAI_MONTHS_FULL[m]} ${baseYearBE}`,
+        year: baseYearCE,
+        monthIndex: m,
+        yearBE: baseYearBE
+      });
+    }
+  }
+
+  return results;
+}
+
