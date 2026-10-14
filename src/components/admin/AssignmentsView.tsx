@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { CalendarCheck, Plus, Edit2, Trash2, User, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { CalendarCheck, Plus, Edit2, Trash2, User, ChevronLeft, ChevronRight, X, Info } from 'lucide-react';
 import { TeachingAssignment, AppUser, Classroom, Subject, Period, DayOfWeek, AcademicYear } from '../../types';
 
 interface AssignmentsViewProps {
@@ -61,36 +61,108 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
 
   // Filter subjects STRICTLY by selected classroom
   const selectedClass = classes.find((c) => c.id === classId || c.name === classId);
+
+  // Check if a subject has already been assigned to another teacher
+  const isSubjectTakenByOtherTeacher = (
+    sub: Subject,
+    currentTeacherUsername: string,
+    currentEditingId?: string | null
+  ) => {
+    return assignments.some((a) => {
+      // Ignore the assignment currently being edited
+      if (currentEditingId && a.id === currentEditingId) return false;
+      // Match active academic year if set
+      if (activeYear?.id && a.academicYearId && a.academicYearId !== activeYear.id) return false;
+      // If it belongs to the current teacher, it's not "another teacher"
+      if (a.teacherUsername === currentTeacherUsername) return false;
+
+      // Check if assignment is for this subject in this classroom
+      const matches =
+        (a.subjectId && a.subjectId === sub.id) ||
+        (a.subjectCode &&
+          a.subjectCode === sub.code &&
+          (a.classId === sub.classId ||
+            a.className === sub.className ||
+            (selectedClass && (a.classId === selectedClass.id || a.className === selectedClass.name))));
+
+      return matches;
+    });
+  };
+
+  // Helper to find who is teaching a subject (if already assigned)
+  const getSubjectAssignedTeacher = (sub: Subject, currentEditingId?: string | null) => {
+    const found = assignments.find((a) => {
+      if (currentEditingId && a.id === currentEditingId) return false;
+      if (activeYear?.id && a.academicYearId && a.academicYearId !== activeYear.id) return false;
+      return (
+        (a.subjectId && a.subjectId === sub.id) ||
+        (a.subjectCode &&
+          a.subjectCode === sub.code &&
+          (a.classId === sub.classId ||
+            a.className === sub.className ||
+            (selectedClass && (a.classId === selectedClass.id || a.className === selectedClass.name))))
+      );
+    });
+    return found ? { username: found.teacherUsername, name: found.teacherName || found.teacherUsername } : null;
+  };
+
+  // All subjects of the selected classroom
   const classSubjects = useMemo(() => {
     if (!classId) return [];
     return subjects.filter(
-      (s) => (s.classId && s.classId === classId) ||
-             (selectedClass && (s.classId === selectedClass.id || s.className === selectedClass.name))
+      (s) =>
+        (s.classId && s.classId === classId) ||
+        (selectedClass && (s.classId === selectedClass.id || s.className === selectedClass.name))
     );
   }, [subjects, classId, selectedClass]);
 
-  // Handle classroom selection change: immediately recalculate subjects and set the first one
+  // Filter subjects available for the current teacher (exclude subjects assigned to other teachers)
+  const availableClassSubjects = useMemo(() => {
+    return classSubjects.filter(
+      (s) => !isSubjectTakenByOtherTeacher(s, teacherUsername, editingAssignment?.id)
+    );
+  }, [classSubjects, assignments, teacherUsername, editingAssignment, activeYear, selectedClass]);
+
+  // Handle classroom selection change: immediately recalculate subjects and set first available for this teacher
   const handleClassChange = (newClassId: string) => {
     setClassId(newClassId);
     const targetClass = classes.find((c) => c.id === newClassId || c.name === newClassId);
-    const availableSubs = subjects.filter(
-      (s) => (s.classId && s.classId === newClassId) ||
-             (targetClass && (s.classId === targetClass.id || s.className === targetClass.name))
+    const classSubs = subjects.filter(
+      (s) =>
+        (s.classId && s.classId === newClassId) ||
+        (targetClass && (s.classId === targetClass.id || s.className === targetClass.name))
     );
-    setSubjectId(availableSubs[0]?.id || '');
+    const available = classSubs.filter(
+      (s) => !isSubjectTakenByOtherTeacher(s, teacherUsername, editingAssignment?.id)
+    );
+    setSubjectId(available[0]?.id || '');
   };
 
-  // Ensure subjectId is always valid for the selected classroom when modal is open
-  useEffect(() => {
-    if (isModalOpen && classSubjects.length > 0) {
-      const isValid = classSubjects.some((s) => s.id === subjectId || s.code === subjectId);
-      if (!isValid) {
-        setSubjectId(classSubjects[0].id);
-      }
-    } else if (isModalOpen && classSubjects.length === 0) {
-      setSubjectId('');
+  // Handle teacher selection change: recalculate available subjects and adjust subjectId if needed
+  const handleTeacherChange = (newTeacherUsername: string) => {
+    setTeacherUsername(newTeacherUsername);
+    const available = classSubjects.filter(
+      (s) => !isSubjectTakenByOtherTeacher(s, newTeacherUsername, editingAssignment?.id)
+    );
+    const isStillValid = available.some((s) => s.id === subjectId || s.code === subjectId);
+    if (!isStillValid) {
+      setSubjectId(available[0]?.id || '');
     }
-  }, [isModalOpen, classSubjects, subjectId]);
+  };
+
+  // Ensure subjectId is always valid for the selected classroom and teacher when modal is open
+  useEffect(() => {
+    if (isModalOpen) {
+      if (availableClassSubjects.length > 0) {
+        const isValid = availableClassSubjects.some((s) => s.id === subjectId || s.code === subjectId);
+        if (!isValid) {
+          setSubjectId(availableClassSubjects[0].id);
+        }
+      } else {
+        setSubjectId('');
+      }
+    }
+  }, [isModalOpen, availableClassSubjects, subjectId]);
 
   const openAddModal = () => {
     if (teachers.length === 0) {
@@ -110,17 +182,22 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
       return;
     }
 
+    const firstTeacherUsername = teachers[0]?.username || '';
     const initialClass = classes[0];
     const initialClassId = initialClass.id;
     const initialClassSubs = subjects.filter(
-      (s) => (s.classId && s.classId === initialClassId) ||
-             (initialClass && (s.classId === initialClass.id || s.className === initialClass.name))
+      (s) =>
+        (s.classId && s.classId === initialClassId) ||
+        (initialClass && (s.classId === initialClass.id || s.className === initialClass.name))
+    );
+    const availableSubs = initialClassSubs.filter(
+      (s) => !isSubjectTakenByOtherTeacher(s, firstTeacherUsername, null)
     );
 
     setEditingAssignment(null);
-    setTeacherUsername(teachers[0]?.username || '');
+    setTeacherUsername(firstTeacherUsername);
     setClassId(initialClassId);
-    setSubjectId(initialClassSubs[0]?.id || '');
+    setSubjectId(availableSubs[0]?.id || '');
     setPeriodId(teachingPeriods[0]?.id || '');
     setDayOfWeek('จันทร์');
     setColor('#0C7C82');
@@ -145,7 +222,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
       return;
     }
     if (!subjectId) {
-      showToast?.('warning', 'กรุณาเลือกรายวิชาของชั้นเรียนนี้ หากยังไม่มีวิชา ให้ไปเพิ่มวิชาที่เมนูจัดการรายวิชาก่อน');
+      showToast?.('warning', 'กรุณาเลือกรายวิชา หรือไม่มีรายวิชาที่ว่างสำหรับครูท่านนี้ในห้องเรียนนี้');
       return;
     }
 
@@ -156,6 +233,16 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
 
     if (!teacher || !cls || !sub || !per) {
       showToast?.('warning', 'ข้อมูลไม่ครบถ้วน กรุณาตรวจสอบรายวิชาและชั้นเรียน');
+      return;
+    }
+
+    // Safety check: is this subject taken by another teacher?
+    if (isSubjectTakenByOtherTeacher(sub, teacher.username, editingAssignment?.id)) {
+      const takenBy = getSubjectAssignedTeacher(sub, editingAssignment?.id);
+      showToast?.(
+        'error',
+        `ไม่สามารถบันทึกได้ เนื่องจากวิชา "${sub.code} ${sub.name}" ถูกมอบหมายให้ ${takenBy?.name || 'ครูท่านอื่น'} ไปแล้ว`
+      );
       return;
     }
 
@@ -400,7 +487,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                 </label>
                 <select
                   value={teacherUsername}
-                  onChange={(e) => setTeacherUsername(e.target.value)}
+                  onChange={(e) => handleTeacherChange(e.target.value)}
                   required
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] text-sm bg-white"
                 >
@@ -431,12 +518,12 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                 </select>
               </div>
 
-              {/* Select Subject - Filtered to show only subjects of the chosen class */}
+              {/* Select Subject - Filtered to show only subjects of the chosen class NOT taken by other teachers */}
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1 flex items-center justify-between">
                   <span>เลือกรายวิชา <span className="text-red-500">*</span></span>
                   <span className="text-[11px] font-normal text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md">
-                    เฉพาะห้อง {selectedClass?.name || '-'}
+                    ห้อง {selectedClass?.name || '-'}
                   </span>
                 </label>
                 <select
@@ -445,21 +532,25 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                   required
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] text-sm bg-white"
                 >
-                  {classSubjects.length === 0 ? (
+                  {availableClassSubjects.length === 0 ? (
                     <option value="" disabled>
-                      -- ไม่มีรายวิชาของห้อง {selectedClass?.name || ''} (กรุณาไปเพิ่มที่เมนูจัดการรายวิชา) --
+                      {classSubjects.length === 0
+                        ? `-- ไม่มีรายวิชาของห้อง ${selectedClass?.name || ''} (กรุณาไปเพิ่มที่เมนูจัดการรายวิชา) --`
+                        : `-- ไม่มีรายวิชาที่ว่างสำหรับครูท่านนี้ --`}
                     </option>
                   ) : (
-                    classSubjects.map((s) => (
+                    availableClassSubjects.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.code} {s.name} ({s.type}) - {s.periodsPerWeek} คาบ/สัปดาห์
                       </option>
                     ))
                   )}
                 </select>
+
                 {classSubjects.length === 0 && (
                   <p className="text-[11px] text-amber-600 mt-1.5 flex items-center gap-1">
-                    <span>⚠️ ยังไม่มีรายวิชาที่ผูกกับห้อง {selectedClass?.name} กรุณาเพิ่มรายวิชาในเมนู "จัดการรายวิชา" ก่อน</span>
+                    <Info className="w-3.5 h-3.5 shrink-0" />
+                    <span>ยังไม่มีรายวิชาที่ผูกกับห้อง {selectedClass?.name} กรุณาเพิ่มรายวิชาในเมนู "จัดการรายวิชา" ก่อน</span>
                   </p>
                 )}
               </div>

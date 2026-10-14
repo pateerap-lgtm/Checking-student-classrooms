@@ -349,10 +349,44 @@ export default function App() {
   };
 
   const handleDeleteAllClasses = async () => {
-    const batch = writeBatch(db);
-    classes.forEach((c) => batch.delete(doc(db, 'classes', c.id)));
-    await batch.commit();
-    showToast('success', 'ลบชั้นเรียนทั้งหมดเรียบร้อยแล้ว');
+    try {
+      const snap = await getDocs(collection(db, 'classes'));
+      if (snap.empty && classes.length === 0) {
+        showToast('warning', 'ไม่มีข้อมูลชั้นเรียนให้ลบ');
+        return;
+      }
+
+      const docsToDelete = snap.docs;
+      for (let i = 0; i < docsToDelete.length; i += 400) {
+        const batch = writeBatch(db);
+        docsToDelete.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
+
+      setClasses([]);
+      showToast('success', `ลบชั้นเรียนทั้งหมดจำนวน ${docsToDelete.length || classes.length} ห้องเรียบร้อยแล้ว`);
+    } catch (err) {
+      console.error(err);
+      handleFirestoreError(err, OperationType.DELETE, 'classes');
+      showToast('error', 'เกิดข้อผิดพลาดในการลบชั้นเรียนทั้งหมด');
+    }
+  };
+
+  const handleDeleteSelectedClasses = async (ids: string[]) => {
+    try {
+      if (ids.length === 0) return;
+      for (let i = 0; i < ids.length; i += 400) {
+        const batch = writeBatch(db);
+        ids.slice(i, i + 400).forEach((id) => batch.delete(doc(db, 'classes', id)));
+        await batch.commit();
+      }
+      setClasses((prev) => prev.filter((c) => !ids.includes(c.id)));
+      showToast('success', `ลบชั้นเรียนที่เลือกจำนวน ${ids.length} ห้องเรียบร้อยแล้ว`);
+    } catch (err) {
+      console.error(err);
+      handleFirestoreError(err, OperationType.DELETE, 'classes');
+      showToast('error', 'เกิดข้อผิดพลาดในการลบชั้นเรียน');
+    }
   };
 
   const handleReorderClasses = async (reordered: Classroom[]) => {
@@ -685,6 +719,8 @@ export default function App() {
                       users={users}
                       attendanceLogs={attendanceLogs}
                       onNavigateTab={setCurrentTab}
+                      academicYears={academicYears}
+                      activeYear={activeYear}
                     />
                   )}
                   {currentTab === 'settings' && (
@@ -725,6 +761,7 @@ export default function App() {
                       onUpdateClass={handleUpdateClass}
                       onDeleteClass={handleDeleteClass}
                       onDeleteAllClasses={handleDeleteAllClasses}
+                      onDeleteSelectedClasses={handleDeleteSelectedClasses}
                       onReorderClasses={handleReorderClasses}
                       onImportClasses={handleImportClasses}
                       openConfirm={openConfirm}

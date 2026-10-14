@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GraduationCap, Plus, Edit2, Trash2, Download, Upload, FileSpreadsheet, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { GraduationCap, Plus, Edit2, Trash2, Download, Upload, FileSpreadsheet, ArrowUp, ArrowDown, X, Search, CheckSquare } from 'lucide-react';
 import { Classroom, AcademicYear } from '../../types';
 import { exportToExcel, parseExcelFile, downloadClassTemplate } from '../../utils/excel';
 
@@ -10,6 +10,7 @@ interface ClassesViewProps {
   onUpdateClass: (id: string, updated: Partial<Classroom>) => Promise<void>;
   onDeleteClass: (id: string) => Promise<void>;
   onDeleteAllClasses: () => Promise<void>;
+  onDeleteSelectedClasses?: (ids: string[]) => Promise<void>;
   onReorderClasses: (reordered: Classroom[]) => Promise<void>;
   onImportClasses: (newClasses: Omit<Classroom, 'id'>[]) => Promise<void>;
   openConfirm: (title: string, message: string, onConfirm: () => void, type?: 'danger' | 'warning') => void;
@@ -29,6 +30,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
   onUpdateClass,
   onDeleteClass,
   onDeleteAllClasses,
+  onDeleteSelectedClasses,
   onReorderClasses,
   onImportClasses,
   openConfirm,
@@ -42,6 +44,28 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
   const [color, setColor] = useState('#0C7C82');
   const [order, setOrder] = useState<number>(1);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Search & Batch Selection
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const filteredClasses = classes.filter((c) =>
+    c.name.toLowerCase().includes(searchTerm.toLowerCase().trim())
+  );
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === filteredClasses.length && filteredClasses.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredClasses.map((c) => c.id));
+    }
+  };
 
   const openAddModal = () => {
     setEditingClass(null);
@@ -90,16 +114,45 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
     openConfirm(
       'ยืนยันการลบชั้นเรียน',
       `คุณต้องการลบชั้นเรียน "${c.name}" ใช่หรือไม่? ข้อมูลนักเรียนและรายวิชาที่อยู่ในห้องนี้อาจได้รับผลกระทบ`,
-      () => onDeleteClass(c.id),
+      async () => {
+        await onDeleteClass(c.id);
+        setSelectedIds((prev) => prev.filter((id) => id !== c.id));
+      },
       'danger'
     );
   };
 
   const handleDeleteAll = () => {
+    if (classes.length === 0) {
+      showToast('warning', 'ไม่มีข้อมูลชั้นเรียนให้ลบ');
+      return;
+    }
     openConfirm(
       'ยืนยันการลบชั้นเรียนทั้งหมด',
-      'คำเตือน: คุณต้องการลบชั้นเรียนทั้งหมดของปีการศึกษานี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้',
-      () => onDeleteAllClasses(),
+      `คำเตือน: คุณต้องการลบชั้นเรียนทั้งหมดจำนวน ${classes.length} ห้องใช่หรือไม่? ข้อมูลชั้นเรียนทั้งหมดจะถูกลบออกจากระบบและไม่สามารถย้อนกลับได้`,
+      async () => {
+        await onDeleteAllClasses();
+        setSelectedIds([]);
+      },
+      'danger'
+    );
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedIds.length === 0) return;
+    openConfirm(
+      'ยืนยันการลบชั้นเรียนที่เลือก',
+      `คุณต้องการลบชั้นเรียนที่เลือกจำนวน ${selectedIds.length} ห้องใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`,
+      async () => {
+        if (onDeleteSelectedClasses) {
+          await onDeleteSelectedClasses(selectedIds);
+        } else {
+          for (const id of selectedIds) {
+            await onDeleteClass(id);
+          }
+        }
+        setSelectedIds([]);
+      },
       'danger'
     );
   };
@@ -204,15 +257,15 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
             <span>ส่งออก Excel</span>
           </button>
 
-          {classes.length > 0 && (
-            <button
-              onClick={handleDeleteAll}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 cursor-pointer transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>ลบทั้งหมด</span>
-            </button>
-          )}
+          <button
+            onClick={handleDeleteAll}
+            disabled={classes.length === 0}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-2xs"
+            title={classes.length === 0 ? 'ไม่มีข้อมูลชั้นเรียนให้ลบ' : `ลบชั้นเรียนทั้งหมด (${classes.length} ห้อง)`}
+          >
+            <Trash2 className="w-4 h-4 text-red-500" />
+            <span>ลบทั้งหมด {classes.length > 0 ? `(${classes.length})` : ''}</span>
+          </button>
 
           <button
             onClick={openAddModal}
@@ -224,12 +277,63 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
         </div>
       </div>
 
+      {/* Search & Batch Selection Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="ค้นหาชื่อชั้นเรียน..."
+            className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] text-xs bg-white shadow-xs"
+          />
+        </div>
+
+        {selectedIds.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 p-1.5 bg-red-50 border border-red-200 rounded-2xl animate-fade-in">
+            <span className="text-xs font-semibold text-red-700 px-2.5">
+              เลือก {selectedIds.length} จาก {classes.length} ห้อง
+            </span>
+            <button
+              onClick={handleDeleteSelected}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 cursor-pointer transition-colors shadow-xs"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>ลบที่เลือก ({selectedIds.length})</span>
+            </button>
+            <button
+              onClick={handleDeleteAll}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-red-700 hover:bg-red-100 cursor-pointer transition-colors"
+            >
+              ลบทั้งหมด
+            </button>
+            <button
+              onClick={() => setSelectedIds([])}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-600 hover:bg-white cursor-pointer transition-colors"
+            >
+              ยกเลิก
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Table */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
+                <th className="py-4 px-4 text-center w-12">
+                  <input
+                    type="checkbox"
+                    checked={filteredClasses.length > 0 && selectedIds.length === filteredClasses.length}
+                    onChange={handleToggleSelectAll}
+                    disabled={filteredClasses.length === 0}
+                    className="w-4 h-4 rounded text-[#0C7C82] focus:ring-[#0C7C82] border-slate-300 cursor-pointer"
+                    title="เลือกทั้งหมด"
+                  />
+                </th>
                 <th className="py-4 px-6 text-center w-24">ลำดับที่</th>
                 <th className="py-4 px-6">ชื่อชั้นเรียน</th>
                 <th className="py-4 px-6 text-center">สีประจำห้อง</th>
@@ -238,15 +342,25 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
-              {classes.length === 0 ? (
+              {filteredClasses.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-400 text-xs">
-                    ยังไม่มีข้อมูลชั้นเรียน คลิก "เพิ่มชั้นเรียน" หรือ "นำเข้า Excel" เพื่อเริ่มต้น
+                  <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
+                    {classes.length === 0
+                      ? 'ยังไม่มีข้อมูลชั้นเรียน คลิก "เพิ่มชั้นเรียน" หรือ "นำเข้า Excel" เพื่อเริ่มต้น'
+                      : `ไม่พบชั้นเรียนที่ตรงกับ "${searchTerm}"`}
                   </td>
                 </tr>
               ) : (
-                classes.map((c, idx) => (
-                  <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
+                filteredClasses.map((c, idx) => (
+                  <tr key={c.id} className={`hover:bg-slate-50/50 transition-colors ${selectedIds.includes(c.id) ? 'bg-teal-50/30' : ''}`}>
+                    <td className="py-4 px-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(c.id)}
+                        onChange={() => handleToggleSelect(c.id)}
+                        className="w-4 h-4 rounded text-[#0C7C82] focus:ring-[#0C7C82] border-slate-300 cursor-pointer"
+                      />
+                    </td>
                     <td className="py-4 px-6 text-center font-bold text-slate-500 text-xs">
                       {c.order || idx + 1}
                     </td>

@@ -325,7 +325,7 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
                       p.isLunchBreak ? 'bg-amber-50/60 text-amber-900' : ''
                     }`}
                   >
-                    <div className="font-bold">{p.name}</div>
+                    <div className="font-bold">{p.isLunchBreak ? 'พักกลางวัน' : p.name}</div>
                     <div className="text-[10px] font-mono font-normal text-slate-500">
                       {p.startTime} - {p.endTime}
                     </div>

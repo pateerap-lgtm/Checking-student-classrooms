@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Clock, Plus, Edit2, Trash2, Download, Upload, FileSpreadsheet, Utensils, X } from 'lucide-react';
 import { Period, AcademicYear } from '../../types';
 import { exportToExcel, parseExcelFile, downloadPeriodTemplate } from '../../utils/excel';
@@ -36,10 +36,21 @@ export const PeriodsView: React.FC<PeriodsViewProps> = ({
   const [isLunchBreak, setIsLunchBreak] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Auto-normalize any existing periods in the database where isLunchBreak is true but name is still "คาบที่..."
+  useEffect(() => {
+    periods.forEach((p) => {
+      if (p.isLunchBreak && p.name !== 'พักกลางวัน') {
+        onUpdatePeriod(p.id, { name: 'พักกลางวัน' });
+      } else if (!p.isLunchBreak && (p.name === 'พักกลางวัน' || p.name === 'พักเที่ยง')) {
+        onUpdatePeriod(p.id, { name: 'พักกลางวัน', isLunchBreak: true });
+      }
+    });
+  }, [periods, onUpdatePeriod]);
+
   const openAddModal = () => {
     setEditingPeriod(null);
-    const nextOrder = periods.length + 1;
-    setName(`คาบที่ ${nextOrder}`);
+    const teachingCount = periods.filter((p) => !p.isLunchBreak).length;
+    setName(`คาบที่ ${teachingCount + 1}`);
     setStartTime('08:30');
     setEndTime('09:20');
     setIsLunchBreak(false);
@@ -48,29 +59,44 @@ export const PeriodsView: React.FC<PeriodsViewProps> = ({
 
   const openEditModal = (period: Period) => {
     setEditingPeriod(period);
-    setName(period.name);
+    setName(period.isLunchBreak ? 'พักกลางวัน' : period.name);
     setStartTime(period.startTime);
     setEndTime(period.endTime);
     setIsLunchBreak(period.isLunchBreak);
     setIsModalOpen(true);
   };
 
+  const handleLunchBreakChange = (checked: boolean) => {
+    setIsLunchBreak(checked);
+    if (checked) {
+      setName('พักกลางวัน');
+    } else {
+      if (name === 'พักกลางวัน' || !name.trim()) {
+        const teachingCount = periods.filter(
+          (p) => !p.isLunchBreak && (!editingPeriod || p.id !== editingPeriod.id)
+        ).length;
+        setName(`คาบที่ ${editingPeriod ? editingPeriod.order : teachingCount + 1}`);
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    const finalName = isLunchBreak ? 'พักกลางวัน' : name.trim();
+    if (!finalName) return;
 
     setIsSaving(true);
     try {
       if (editingPeriod) {
         await onUpdatePeriod(editingPeriod.id, {
-          name: name.trim(),
+          name: finalName,
           startTime,
           endTime,
           isLunchBreak
         });
       } else {
         await onAddPeriod({
-          name: name.trim(),
+          name: finalName,
           startTime,
           endTime,
           isLunchBreak,
@@ -87,7 +113,7 @@ export const PeriodsView: React.FC<PeriodsViewProps> = ({
   const handleDelete = (p: Period) => {
     openConfirm(
       'ยืนยันการลบคาบสอน',
-      `คุณต้องการลบ "${p.name}" (${p.startTime} - ${p.endTime}) ใช่หรือไม่?`,
+      `คุณต้องการลบ "${p.isLunchBreak ? 'พักกลางวัน' : p.name}" (${p.startTime} - ${p.endTime}) ใช่หรือไม่?`,
       () => onDeletePeriod(p.id),
       'danger'
     );
@@ -105,7 +131,7 @@ export const PeriodsView: React.FC<PeriodsViewProps> = ({
   const handleExportExcel = () => {
     const exportData = periods.map((p, idx) => ({
       'ลำดับ': idx + 1,
-      'ชื่อคาบ': p.name,
+      'ชื่อคาบ': p.isLunchBreak ? 'พักกลางวัน' : p.name,
       'เวลาเริ่มต้น': p.startTime,
       'เวลาสิ้นสุด': p.endTime,
       'ประเภท': p.isLunchBreak ? 'พักกลางวัน (ไม่นับเป็นคาบสอน)' : 'คาบเรียนปกติ',
@@ -127,9 +153,13 @@ export const PeriodsView: React.FC<PeriodsViewProps> = ({
       }
 
       const importedPeriods: Omit<Period, 'id'>[] = parsedData.map((row: any, i: number) => {
-        const isLunch = row['พักเที่ยง(ใช่/ไม่ใช่)'] === 'ใช่' || row['ประเภท']?.includes('พัก');
+        const isLunch = row['พักเที่ยง(ใช่/ไม่ใช่)'] === 'ใช่' || 
+                        row['ประเภท']?.includes('พัก') || 
+                        String(row['ชื่อคาบ'] || '').includes('พัก');
+        const defaultName = isLunch ? 'พักกลางวัน' : `คาบที่ ${periods.length + i + 1}`;
+        const finalName = isLunch ? 'พักกลางวัน' : (row['ชื่อคาบ'] || defaultName);
         return {
-          name: row['ชื่อคาบ'] || `คาบที่ ${periods.length + i + 1}`,
+          name: finalName,
           startTime: row['เวลาเริ่มต้น'] || '08:30',
           endTime: row['เวลาสิ้นสุด'] || '09:20',
           isLunchBreak: !!isLunch,
@@ -251,7 +281,7 @@ export const PeriodsView: React.FC<PeriodsViewProps> = ({
                           <Clock className="w-3.5 h-3.5" />
                         </span>
                       )}
-                      <span>{p.name}</span>
+                      <span>{p.isLunchBreak ? 'พักกลางวัน' : p.name}</span>
                     </td>
                     <td className="py-4 px-6 font-mono text-slate-600 text-xs">{p.startTime}</td>
                     <td className="py-4 px-6 font-mono text-slate-600 text-xs">{p.endTime}</td>
@@ -313,12 +343,22 @@ export const PeriodsView: React.FC<PeriodsViewProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={name}
+                  value={isLunchBreak ? 'พักกลางวัน' : name}
                   onChange={(e) => setName(e.target.value)}
+                  disabled={isLunchBreak}
                   placeholder="เช่น คาบที่ 1 หรือ พักกลางวัน"
                   required
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] text-sm"
+                  className={`w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm ${
+                    isLunchBreak
+                      ? 'bg-amber-50/70 text-amber-900 font-semibold cursor-not-allowed border-amber-200'
+                      : 'focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82]'
+                  }`}
                 />
+                {isLunchBreak && (
+                  <p className="text-[11px] text-amber-700 mt-1 font-medium">
+                    * พักกลางวันจะไม่แสดงเป็นคาบที่ โดยจะแสดงชื่อเป็น "พักกลางวัน"
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -354,15 +394,15 @@ export const PeriodsView: React.FC<PeriodsViewProps> = ({
                   <input
                     type="checkbox"
                     checked={isLunchBreak}
-                    onChange={(e) => setIsLunchBreak(e.target.checked)}
+                    onChange={(e) => handleLunchBreakChange(e.target.checked)}
                     className="w-4 h-4 text-amber-600 rounded-sm focus:ring-amber-500"
                   />
                   <div>
                     <span className="text-xs font-bold text-amber-900 block">
-                      เวลาพักเที่ยง (ไม่นับเป็นคาบสอน)
+                      เวลาพักกลางวัน (ไม่นับเป็นคาบสอน)
                     </span>
                     <span className="text-[11px] text-amber-700">
-                      ช่วงเวลานี้จะไม่แสดงให้เลือกสำหรับจัดรายวิชาสอน
+                      ช่วงเวลานี้จะไม่แสดงให้เลือกสำหรับจัดรายวิชาสอน และแสดงชื่อเป็น "พักกลางวัน"
                     </span>
                   </div>
                 </label>
