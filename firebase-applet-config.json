@@ -1,0 +1,12 @@
+{
+  "projectId": "check-in-std",
+  "appId": "1:757254843015:web:8011ba5a5ed14dc41b2622",
+  "apiKey": "AIzaSyDAnUQlByWv58qbkjUIORxTQc5CJIlzAkE",
+  "authDomain": "check-in-std.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-62f5b67d-3831-4258-981a-684e49632f8a",
+  "storageBucket": "check-in-std.firebasestorage.app",
+  "messagingSenderId": "757254843015",
+  "measurementId": "",
+  "oAuthClientId": "757254843015-4ro32p7vmqv7o03ele75p7t53vognjo5.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
+}

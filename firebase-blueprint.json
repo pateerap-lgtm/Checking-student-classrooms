@@ -1,0 +1,176 @@
+{
+  "entities": {
+    "SystemSetting": {
+      "title": "SystemSetting",
+      "description": "School and system global configuration settings",
+      "type": "object",
+      "properties": {
+        "schoolName": { "type": "string" },
+        "affiliationName": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["schoolName", "affiliationName"]
+    },
+    "AcademicYear": {
+      "title": "AcademicYear",
+      "description": "Academic school year and term dates",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "term1Start": { "type": "string" },
+        "term1End": { "type": "string" },
+        "term2Start": { "type": "string" },
+        "term2End": { "type": "string" },
+        "isCurrent": { "type": "boolean" },
+        "color": { "type": "string" }
+      },
+      "required": ["name", "isCurrent"]
+    },
+    "Period": {
+      "title": "Period",
+      "description": "Teaching periods and lunch break time slot",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "isLunchBreak": { "type": "boolean" },
+        "order": { "type": "number" },
+        "academicYearId": { "type": "string" }
+      },
+      "required": ["name", "startTime", "endTime", "isLunchBreak"]
+    },
+    "Classroom": {
+      "title": "Classroom",
+      "description": "Grade and classroom sections",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "color": { "type": "string" },
+        "order": { "type": "number" },
+        "academicYearId": { "type": "string" }
+      },
+      "required": ["name", "color", "order"]
+    },
+    "AppUser": {
+      "title": "AppUser",
+      "description": "System accounts for admin, executive director, and teachers",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "fullName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "director", "teacher"] }
+      },
+      "required": ["username", "password", "fullName", "role"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student information linked to class and academic year",
+      "type": "object",
+      "properties": {
+        "seq": { "type": "number" },
+        "name": { "type": "string" },
+        "className": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "classId": { "type": "string" },
+        "academicYearId": { "type": "string" }
+      },
+      "required": ["seq", "name", "className", "username", "password"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Curriculum course subjects",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["พื้นฐาน", "เพิ่มเติม", "พัฒนาผู้เรียน"] },
+        "periodsPerWeek": { "type": "number" },
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "academicYearId": { "type": "string" }
+      },
+      "required": ["code", "name", "type", "periodsPerWeek"]
+    },
+    "TeachingAssignment": {
+      "title": "TeachingAssignment",
+      "description": "Teacher schedule assigning teacher to subject, class, day and period",
+      "type": "object",
+      "properties": {
+        "teacherUsername": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "subjectCode": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "periodId": { "type": "string" },
+        "periodName": { "type": "string" },
+        "dayOfWeek": { "type": "string" },
+        "color": { "type": "string" },
+        "academicYearId": { "type": "string" }
+      },
+      "required": ["teacherUsername", "classId", "subjectId", "dayOfWeek", "periodId"]
+    },
+    "AttendanceLog": {
+      "title": "AttendanceLog",
+      "description": "Subject student daily attendance check log",
+      "type": "object",
+      "properties": {
+        "academicYearId": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "subjectCode": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "date": { "type": "string" },
+        "dayOfWeek": { "type": "string" },
+        "periodId": { "type": "string" },
+        "teacherUsername": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["subjectId", "classId", "date", "dayOfWeek"]
+    }
+  },
+  "firestore": {
+    "/settings/{settingId}": {
+      "schema": "SystemSetting",
+      "description": "System school settings"
+    },
+    "/academicYears/{yearId}": {
+      "schema": "AcademicYear",
+      "description": "School academic years"
+    },
+    "/periods/{periodId}": {
+      "schema": "Period",
+      "description": "Class teaching and lunch periods"
+    },
+    "/classes/{classId}": {
+      "schema": "Classroom",
+      "description": "School classes"
+    },
+    "/appUsers/{userId}": {
+      "schema": "AppUser",
+      "description": "System administrative and teacher users"
+    },
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Students list"
+    },
+    "/subjects/{subjectId}": {
+      "schema": "Subject",
+      "description": "Curriculum subjects"
+    },
+    "/assignments/{assignmentId}": {
+      "schema": "TeachingAssignment",
+      "description": "Teaching class and timetable assignments"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "AttendanceLog",
+      "description": "Student attendance logs"
+    }
+  }
+}

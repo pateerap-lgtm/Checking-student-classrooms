@@ -1,0 +1,6 @@
+{
+  "name": "ระบบเช็คชื่อนักเรียนสำหรับรายวิชา",
+  "description": "ระบบบันทึกและจัดการการเช็คชื่อนักเรียนสำหรับรายวิชา ตารางสอน รายงานการมาเรียน ออกแบบทันสมัยใช้งานง่าย",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
