@@ -441,6 +441,28 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
 
   return (
     <div className="space-y-6 font-['Sarabun',sans-serif]">
+      {/* Explicit Print Page Settings: A4 Portrait with Narrow Margin */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @page {
+          size: A4 portrait !important;
+          margin: 0.5cm !important;
+        }
+        @media print {
+          @page {
+            size: A4 portrait !important;
+            margin: 0.5cm !important;
+          }
+          html, body {
+            background: white !important;
+            color: black !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      `}} />
+
       {/* Control Header & Filters (Hidden during print / PDF) */}
       <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-5 no-print">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
@@ -461,7 +483,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-medium bg-gradient-to-r from-[#0C7C82] to-[#35B4B0] hover:from-[#096368] hover:to-[#2ba09c] shadow-md shadow-[#0C7C82]/20 cursor-pointer text-sm disabled:opacity-50"
             >
               <Printer className="w-4 h-4" />
-              <span>พิมพ์รายงาน / บันทึกเป็น PDF (แนวนอน ระยะขอบแคบ)</span>
+              <span>พิมพ์รายงาน / บันทึกเป็น PDF (แนวตั้ง ระยะขอบแคบ)</span>
             </button>
           </div>
         </div>
@@ -552,12 +574,12 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
             </span>
           </div>
           <div className="text-[10px] text-slate-400">
-            เอกสารพิมพ์ถูกจัดรูปแบบตามมาตรฐาน A4 แนวนอน (Landscape) ระยะขอบแคบ (Narrow)
+            เอกสารพิมพ์ถูกจัดรูปแบบตามมาตรฐาน A4 แนวตั้ง (Portrait) ระยะขอบแคบ (Narrow Margin)
           </div>
         </div>
       </div>
 
-      {/* Official Report Document Container (Formatted for screen and Landscape A4 PDF print) */}
+      {/* Official Report Document Container (Formatted for screen and Portrait A4 PDF print) */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm print:p-0 print:border-none print:shadow-none print:w-full overflow-hidden">
         {/* Official Document Header */}
         <div className="text-center pb-3 mb-3 border-b-2 border-slate-800 space-y-1">
@@ -617,14 +639,14 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
 
         {/* Attendance Matrix Table */}
         <div className="overflow-x-auto w-full">
-          <table className="w-full text-center border-collapse border border-slate-600 text-xs text-slate-900 print:text-[10px]">
+          <table className="w-full text-center border-collapse border border-slate-600 text-xs text-slate-900 print:text-[9px] print:w-full">
             <thead>
               {/* Top Header Row */}
               <tr className="bg-slate-100 text-slate-900 font-bold">
-                <th className="py-1.5 px-1 border border-slate-600 w-10 shrink-0 text-center" rowSpan={2}>
+                <th className="py-1.5 px-1 border border-slate-600 w-10 shrink-0 text-center print:w-7 print:px-0.5 print:py-1" rowSpan={2}>
                   ลำดับ
                 </th>
-                <th className="py-1.5 px-3 border border-slate-600 min-w-[160px] text-left" rowSpan={2}>
+                <th className="py-1.5 px-3 border border-slate-600 min-w-[160px] text-left print:min-w-0 print:px-1.5 print:py-1 print:text-[9.5px]" rowSpan={2}>
                   ชื่อนักเรียน
                 </th>
 
@@ -635,7 +657,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
                   </th>
                 ) : (
                   <th
-                    className="py-1 px-1 border border-slate-600 text-center font-bold"
+                    className="py-1 px-1 border border-slate-600 text-center font-bold print:py-0.5 print:text-[9px]"
                     colSpan={teachingDates.length}
                   >
                     วันที่ (เฉพาะวันที่มีสอนในเดือน {selectedMonthLabel})
@@ -643,13 +665,13 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
                 )}
 
                 {/* Summary Columns Header */}
-                <th className="py-1 px-1 border border-slate-600 text-center font-bold" colSpan={6}>
+                <th className="py-1 px-1 border border-slate-600 text-center font-bold print:py-0.5 print:text-[9px]" colSpan={6}>
                   สรุป (วัน)
                 </th>
               </tr>
 
               {/* Second Header Row: Specific Day Numbers (1, 2, 3...) & Summary Subheaders */}
-              <tr className="bg-slate-50 text-[11px] print:text-[9px] font-bold">
+              <tr className="bg-slate-50 text-[11px] print:text-[8.5px] font-bold">
                 {teachingDates.map((dateStr) => {
                   const dayNum = parseInt(dateStr.split('-')[2], 10);
                   const dayOfWeek = getDayOfWeekFromDate(dateStr);
@@ -658,11 +680,11 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
                   return (
                     <th
                       key={dateStr}
-                      className="py-1 px-0.5 border border-slate-600 min-w-[26px] max-w-[32px] text-center"
+                      className="py-1 px-0.5 border border-slate-600 min-w-[26px] max-w-[32px] text-center print:min-w-0 print:w-auto print:px-0.5 print:py-0.5"
                       title={formatToThaiBE(dateStr)}
                     >
-                      <div className="text-xs print:text-[10px] font-bold leading-tight">{dayNum}</div>
-                      <div className="text-[9px] print:text-[8px] text-slate-500 font-normal leading-tight">
+                      <div className="text-xs print:text-[9px] font-bold leading-tight">{dayNum}</div>
+                      <div className="text-[9px] print:text-[7.5px] text-slate-500 font-normal leading-tight">
                         {shortDay}
                       </div>
                     </th>
@@ -670,17 +692,17 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
                 })}
 
                 {/* Summary Subheaders: มา, ขาด, สาย, ป่วย, กิจ, ร้อยละ */}
-                <th className="py-1 px-1 border border-slate-600 w-8 text-emerald-800 text-[10px]">มา</th>
-                <th className="py-1 px-1 border border-slate-600 w-8 text-red-700 text-[10px]">ขาด</th>
-                <th className="py-1 px-1 border border-slate-600 w-8 text-amber-700 text-[10px]">สาย</th>
-                <th className="py-1 px-1 border border-slate-600 w-8 text-sky-700 text-[10px]">ป่วย</th>
-                <th className="py-1 px-1 border border-slate-600 w-8 text-orange-700 text-[10px]">กิจ</th>
-                <th className="py-1 px-1 border border-slate-600 w-10 text-slate-900 text-[10px]">%</th>
+                <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-emerald-800 text-[10px] print:text-[8px]">มา</th>
+                <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-red-700 text-[10px] print:text-[8px]">ขาด</th>
+                <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-amber-700 text-[10px] print:text-[8px]">สาย</th>
+                <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-sky-700 text-[10px] print:text-[8px]">ป่วย</th>
+                <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-orange-700 text-[10px] print:text-[8px]">กิจ</th>
+                <th className="py-1 px-1 border border-slate-600 w-10 print:w-7 print:px-0.5 text-slate-900 text-[10px] print:text-[8px]">%</th>
               </tr>
             </thead>
 
             {/* Table Body: Student Rows */}
-            <tbody className="divide-y divide-slate-400 text-xs print:text-[10px]">
+            <tbody className="divide-y divide-slate-400 text-xs print:text-[9px]">
               {classStudents.length === 0 ? (
                 <tr>
                   <td
@@ -700,12 +722,12 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
                       className="hover:bg-teal-50/20 print:hover:bg-transparent transition-colors"
                     >
                       {/* 1. ลำดับ */}
-                      <td className="py-1 px-1 border border-slate-600 text-center font-semibold text-slate-700">
+                      <td className="py-1 px-1 border border-slate-600 text-center font-semibold text-slate-700 print:py-0.5 print:px-0.5 print:text-[9px]">
                         {std.seq || idx + 1}
                       </td>
 
                       {/* 2. ชื่อนักเรียน */}
-                      <td className="py-1 px-2.5 border border-slate-600 text-left font-medium text-slate-900 whitespace-nowrap">
+                      <td className="py-1 px-2.5 border border-slate-600 text-left font-medium text-slate-900 whitespace-nowrap print:py-0.5 print:px-1.5 print:text-[9.5px]">
                         {std.name}
                       </td>
 
@@ -728,7 +750,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
                                   currentStatus: status
                                 });
                               }}
-                              className="py-1 px-0.5 border border-slate-600 text-center font-bold cursor-pointer hover:bg-teal-100/50 print:cursor-default print:hover:bg-transparent transition-colors select-none"
+                              className="py-1 px-0.5 border border-slate-600 text-center font-bold cursor-pointer hover:bg-teal-100/50 print:cursor-default print:hover:bg-transparent transition-colors select-none print:py-0.5 print:px-0 print:text-[9px]"
                               title={`คลิกเพื่อเช็คชื่อ: ${std.name} (${formatToThaiBE(dateStr)})`}
                             >
                               {renderStatusSymbol(status)}
@@ -738,22 +760,22 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
                       )}
 
                       {/* Student Individual Summary Totals */}
-                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-emerald-800 bg-emerald-50/30 print:bg-transparent">
+                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-emerald-800 bg-emerald-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
                         {stats?.present || 0}
                       </td>
-                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-red-700 bg-red-50/30 print:bg-transparent">
+                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-red-700 bg-red-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
                         {stats?.absent || 0}
                       </td>
-                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-amber-700 bg-amber-50/30 print:bg-transparent">
+                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-amber-700 bg-amber-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
                         {stats?.late || 0}
                       </td>
-                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-sky-700 bg-sky-50/30 print:bg-transparent">
+                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-sky-700 bg-sky-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
                         {stats?.sick || 0}
                       </td>
-                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-orange-700 bg-orange-50/30 print:bg-transparent">
+                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-orange-700 bg-orange-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
                         {stats?.leave || 0}
                       </td>
-                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-slate-900">
+                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-slate-900 print:py-0.5 print:px-0.5 print:text-[8.5px]">
                         {stats?.rate}%
                       </td>
                     </tr>
@@ -766,50 +788,50 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
             {classStudents.length > 0 && teachingDates.length > 0 && (
               <tfoot>
                 {/* รวมมาเรียน */}
-                <tr className="bg-emerald-50/70 font-bold text-[11px] print:text-[9px] text-emerald-900 border-t-2 border-slate-600">
-                  <td colSpan={2} className="py-1 px-2 border border-slate-600 text-right">
+                <tr className="bg-emerald-50/70 font-bold text-[11px] print:text-[8.5px] text-emerald-900 border-t-2 border-slate-600">
+                  <td colSpan={2} className="py-1 px-2 border border-slate-600 text-right print:py-0.5 print:px-1">
                     รวมมาเรียน (คน):
                   </td>
                   {teachingDates.map((dateStr) => (
-                    <td key={dateStr} className="py-1 px-0.5 border border-slate-600 text-center font-bold">
+                    <td key={dateStr} className="py-1 px-0.5 border border-slate-600 text-center font-bold print:py-0.5 print:px-0">
                       {dateTotals[dateStr]?.present || 0}
                     </td>
                   ))}
-                  <td colSpan={6} className="py-1 px-2 border border-slate-600 text-center">
+                  <td colSpan={6} className="py-1 px-2 border border-slate-600 text-center print:py-0.5 print:px-0.5">
                     {studentStats.reduce((sum, s) => sum + s.present, 0)} ครั้ง
                   </td>
                 </tr>
 
                 {/* รวมขาดเรียน */}
-                <tr className="bg-red-50/70 font-bold text-[11px] print:text-[9px] text-red-900">
-                  <td colSpan={2} className="py-1 px-2 border border-slate-600 text-right">
+                <tr className="bg-red-50/70 font-bold text-[11px] print:text-[8.5px] text-red-900">
+                  <td colSpan={2} className="py-1 px-2 border border-slate-600 text-right print:py-0.5 print:px-1">
                     รวมขาดเรียน (คน):
                   </td>
                   {teachingDates.map((dateStr) => (
-                    <td key={dateStr} className="py-1 px-0.5 border border-slate-600 text-center font-bold">
+                    <td key={dateStr} className="py-1 px-0.5 border border-slate-600 text-center font-bold print:py-0.5 print:px-0">
                       {dateTotals[dateStr]?.absent || 0}
                     </td>
                   ))}
-                  <td colSpan={6} className="py-1 px-2 border border-slate-600 text-center">
+                  <td colSpan={6} className="py-1 px-2 border border-slate-600 text-center print:py-0.5 print:px-0.5">
                     {studentStats.reduce((sum, s) => sum + s.absent, 0)} ครั้ง
                   </td>
                 </tr>
 
                 {/* รวมสาย, ป่วย, กิจ */}
-                <tr className="bg-slate-100 font-bold text-[11px] print:text-[9px] text-slate-800">
-                  <td colSpan={2} className="py-1 px-2 border border-slate-600 text-right">
+                <tr className="bg-slate-100 font-bold text-[11px] print:text-[8.5px] text-slate-800">
+                  <td colSpan={2} className="py-1 px-2 border border-slate-600 text-right print:py-0.5 print:px-1">
                     รวมสาย/ป่วย/กิจ (คน):
                   </td>
                   {teachingDates.map((dateStr) => {
                     const dt = dateTotals[dateStr];
                     const otherCount = (dt?.late || 0) + (dt?.sick || 0) + (dt?.leave || 0);
                     return (
-                      <td key={dateStr} className="py-1 px-0.5 border border-slate-600 text-center font-bold">
+                      <td key={dateStr} className="py-1 px-0.5 border border-slate-600 text-center font-bold print:py-0.5 print:px-0">
                         {otherCount}
                       </td>
                     );
                   })}
-                  <td colSpan={6} className="py-1 px-2 border border-slate-600 text-center">
+                  <td colSpan={6} className="py-1 px-2 border border-slate-600 text-center print:py-0.5 print:px-0.5">
                     {studentStats.reduce((sum, s) => sum + s.late + s.sick + s.leave, 0)} ครั้ง
                   </td>
                 </tr>
@@ -818,8 +840,8 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
           </table>
         </div>
 
-        {/* Official Signature Block (Formatted for A4 Landscape Document) */}
-        <div className="grid grid-cols-2 gap-12 pt-8 text-center text-xs text-slate-800 print:pt-6">
+        {/* Official Signature Block (Formatted for A4 Portrait Document) */}
+        <div className="grid grid-cols-2 gap-8 pt-8 text-center text-xs text-slate-800 print:pt-6 print:gap-4 print:break-inside-avoid">
           <div className="space-y-6">
             <p className="leading-relaxed">
               ลงชื่อ..................................................................ครูผู้สอน

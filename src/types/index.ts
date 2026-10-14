@@ -81,6 +81,7 @@ export interface TeachingAssignment {
   subjectCode: string;
   subjectName: string;
   periodId: string;
+  endPeriodId?: string;
   periodName: string;
   dayOfWeek: DayOfWeek;
   color: string;

@@ -379,10 +379,20 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
                         );
                       }
 
-                      // Find assignment for this day and period
-                      const assignment = myAssignments.find(
-                        (a) => a.dayOfWeek === day && a.periodId === period.id
-                      );
+                      // Find assignment for this day and period (supports multi-period assignment)
+                      const assignment = myAssignments.find((a) => {
+                        if (a.dayOfWeek !== day) return false;
+                        if (a.periodId === period.id) return true;
+                        if (a.endPeriodId && a.endPeriodId !== a.periodId) {
+                          const startIdx = periods.findIndex((p) => p.id === a.periodId);
+                          const endIdx = periods.findIndex((p) => p.id === a.endPeriodId);
+                          const currIdx = periods.findIndex((p) => p.id === period.id);
+                          if (startIdx !== -1 && endIdx !== -1 && currIdx >= startIdx && currIdx <= endIdx) {
+                            return true;
+                          }
+                        }
+                        return false;
+                      });
 
                       if (!assignment) {
                         return (
@@ -401,7 +411,7 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
                           l.date === selectedDate &&
                           l.subjectId === assignment.subjectId &&
                           l.classId === assignment.classId &&
-                          l.periodId === assignment.periodId
+                          (l.periodId === assignment.periodId || l.periodId === period.id)
                       );
 
                       return (

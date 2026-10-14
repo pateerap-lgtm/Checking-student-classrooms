@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { CalendarCheck, Plus, Edit2, Trash2, User, ChevronLeft, ChevronRight, X, Info } from 'lucide-react';
+import { CalendarCheck, Plus, Edit2, Trash2, User, ChevronLeft, ChevronRight, X, Info, Clock } from 'lucide-react';
 import { TeachingAssignment, AppUser, Classroom, Subject, Period, DayOfWeek, AcademicYear } from '../../types';
 
 interface AssignmentsViewProps {
@@ -52,59 +52,137 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   const [classId, setClassId] = useState(classes[0]?.id || '');
   const [subjectId, setSubjectId] = useState('');
   const [periodId, setPeriodId] = useState(periods.find((p) => !p.isLunchBreak)?.id || '');
+  const [endPeriodId, setEndPeriodId] = useState(periods.find((p) => !p.isLunchBreak)?.id || '');
   const [dayOfWeek, setDayOfWeek] = useState<DayOfWeek>('จันทร์');
   const [color, setColor] = useState('#0C7C82');
   const [isSaving, setIsSaving] = useState(false);
 
   // Available teaching periods (excluding lunch break)
-  const teachingPeriods = periods.filter((p) => !p.isLunchBreak);
+  const teachingPeriods = useMemo(() => periods.filter((p) => !p.isLunchBreak), [periods]);
 
   // Filter subjects STRICTLY by selected classroom
   const selectedClass = classes.find((c) => c.id === classId || c.name === classId);
 
-  // Check if a subject has already been assigned to another teacher
-  const isSubjectTakenByOtherTeacher = (
-    sub: Subject,
-    currentTeacherUsername: string,
-    currentEditingId?: string | null
-  ) => {
-    return assignments.some((a) => {
-      // Ignore the assignment currently being edited
-      if (currentEditingId && a.id === currentEditingId) return false;
-      // Match active academic year if set
-      if (activeYear?.id && a.academicYearId && a.academicYearId !== activeYear.id) return false;
-      // If it belongs to the current teacher, it's not "another teacher"
-      if (a.teacherUsername === currentTeacherUsername) return false;
+  // Selected subject object
+  const selectedSubject = useMemo(() => {
+    return subjects.find((s) => s.id === subjectId || s.code === subjectId);
+  }, [subjects, subjectId]);
 
-      // Check if assignment is for this subject in this classroom
-      const matches =
-        (a.subjectId && a.subjectId === sub.id) ||
-        (a.subjectCode &&
-          a.subjectCode === sub.code &&
-          (a.classId === sub.classId ||
-            a.className === sub.className ||
-            (selectedClass && (a.classId === selectedClass.id || a.className === selectedClass.name))));
-
-      return matches;
-    });
+  // Helper to calculate target end period based on start period ID and maximum allowed count
+  const calculateEndPeriod = (startPId: string, maxCount: number) => {
+    if (teachingPeriods.length === 0) return startPId;
+    const startIdx = teachingPeriods.findIndex((p) => p.id === startPId);
+    if (startIdx === -1) return teachingPeriods[0]?.id || startPId;
+    const targetEndIdx = Math.min(
+      teachingPeriods.length - 1,
+      startIdx + Math.max(1, maxCount) - 1
+    );
+    return teachingPeriods[targetEndIdx]?.id || startPId;
   };
 
-  // Helper to find who is teaching a subject (if already assigned)
-  const getSubjectAssignedTeacher = (sub: Subject, currentEditingId?: string | null) => {
+  // Helper to calculate how many periods an assignment occupies
+  const getAssignmentPeriodSpan = (a: TeachingAssignment): number => {
+    if (a.endPeriodId && a.endPeriodId !== a.periodId) {
+      const sIdx = teachingPeriods.findIndex((p) => p.id === a.periodId);
+      const eIdx = teachingPeriods.findIndex((p) => p.id === a.endPeriodId);
+      if (sIdx !== -1 && eIdx !== -1 && eIdx >= sIdx) {
+        return eIdx - sIdx + 1;
+      }
+    }
+    if (a.periodName) {
+      const match = a.periodName.match(/คาบที่\s*(\d+)\s*ถึง\s*คาบที่\s*(\d+)/);
+      if (match) {
+        const p1 = parseInt(match[1], 10);
+        const p2 = parseInt(match[2], 10);
+        if (!isNaN(p1) && !isNaN(p2) && p2 >= p1) {
+          return p2 - p1 + 1;
+        }
+      }
+    }
+    return 1;
+  };
+
+  // Helper to calculate how many periods have been assigned to a subject in this classroom
+  const getSubjectAssignedCount = (
+    sub: Subject,
+    currentEditingId?: string | null
+  ): number => {
+    return assignments
+      .filter((a) => {
+        if (currentEditingId && a.id === currentEditingId) return false;
+        if (activeYear?.id && a.academicYearId && a.academicYearId !== activeYear.id) return false;
+
+        const matchesSubject =
+          (a.subjectId && a.subjectId === sub.id) ||
+          (a.subjectCode && a.subjectCode === sub.code);
+
+        const matchesClass =
+          (sub.classId && a.classId === sub.classId) ||
+          (sub.className && a.className === sub.className) ||
+          (classId && (a.classId === classId || a.className === selectedClass?.name));
+
+        return matchesSubject && matchesClass;
+      })
+      .reduce((sum, a) => sum + getAssignmentPeriodSpan(a), 0);
+  };
+
+  // Helper to calculate remaining unassigned periods for a subject
+  const getSubjectRemainingPeriods = (
+    sub: Subject,
+    currentEditingId?: string | null
+  ): number => {
+    const total = Number(sub.periodsPerWeek) || 1;
+    const assigned = getSubjectAssignedCount(sub, currentEditingId);
+    return Math.max(0, total - assigned);
+  };
+
+  // Helper to find who was assigned to a subject in this classroom (if any)
+  const getSubjectAssignedTeacher = (
+    sub: Subject,
+    currentEditingId?: string | null
+  ) => {
     const found = assignments.find((a) => {
       if (currentEditingId && a.id === currentEditingId) return false;
       if (activeYear?.id && a.academicYearId && a.academicYearId !== activeYear.id) return false;
-      return (
+
+      const matchesSubject =
         (a.subjectId && a.subjectId === sub.id) ||
-        (a.subjectCode &&
-          a.subjectCode === sub.code &&
-          (a.classId === sub.classId ||
-            a.className === sub.className ||
-            (selectedClass && (a.classId === selectedClass.id || a.className === selectedClass.name))))
-      );
+        (a.subjectCode && a.subjectCode === sub.code);
+
+      const matchesClass =
+        (sub.classId && a.classId === sub.classId) ||
+        (sub.className && a.className === sub.className) ||
+        (classId && (a.classId === classId || a.className === selectedClass?.name));
+
+      return matchesSubject && matchesClass;
     });
     return found ? { username: found.teacherUsername, name: found.teacherName || found.teacherUsername } : null;
   };
+
+  const totalSubjectPeriods = Number(selectedSubject?.periodsPerWeek) || 1;
+  const assignedSubjectPeriods = selectedSubject
+    ? getSubjectAssignedCount(selectedSubject, editingAssignment?.id)
+    : 0;
+  const remainingSubjectPeriods = selectedSubject
+    ? getSubjectRemainingPeriods(selectedSubject, editingAssignment?.id)
+    : 1;
+
+  const startPeriod = useMemo(() => {
+    return teachingPeriods.find((p) => p.id === periodId) || periods.find((p) => p.id === periodId);
+  }, [teachingPeriods, periods, periodId]);
+
+  const endPeriod = useMemo(() => {
+    return teachingPeriods.find((p) => p.id === endPeriodId) || startPeriod;
+  }, [teachingPeriods, endPeriodId, startPeriod]);
+
+  // Current span chosen in modal
+  const currentSpan = useMemo(() => {
+    if (teachingPeriods.length === 0) return 1;
+    const startIdx = teachingPeriods.findIndex((p) => p.id === periodId);
+    const endIdx = teachingPeriods.findIndex((p) => p.id === endPeriodId);
+    if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) return 1;
+    return endIdx - startIdx + 1;
+  }, [teachingPeriods, periodId, endPeriodId]);
 
   // All subjects of the selected classroom
   const classSubjects = useMemo(() => {
@@ -116,14 +194,29 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
     );
   }, [subjects, classId, selectedClass]);
 
-  // Filter subjects available for the current teacher (exclude subjects assigned to other teachers)
+  // Filter subjects of the selected classroom:
+  // 1. ถ้ารายวิชาใดมีคาบมากกว่า 1 คาบ แต่ยังลงคาบสอนไม่ครบจำนวนคาบ/สัปดาห์ ให้สามารถเลือกรายวิชานั้นได้อีก
+  // 2. ถ้ารายวิชาใดลงคาบสอนครบแล้ว (เหลือ 0 คาบ) หรือมอบหมายให้ครูท่านอื่นแล้ว จะไม่แสดงให้เลือกอีก
   const availableClassSubjects = useMemo(() => {
-    return classSubjects.filter(
-      (s) => !isSubjectTakenByOtherTeacher(s, teacherUsername, editingAssignment?.id)
-    );
-  }, [classSubjects, assignments, teacherUsername, editingAssignment, activeYear, selectedClass]);
+    return classSubjects.filter((s) => {
+      // If currently editing this assignment and it matches this subject, keep it available
+      if (editingAssignment && (s.id === editingAssignment.subjectId || s.code === editingAssignment.subjectCode)) {
+        return true;
+      }
 
-  // Handle classroom selection change: immediately recalculate subjects and set first available for this teacher
+      // If already assigned to another teacher, do not show to current teacher
+      const assignedTeacher = getSubjectAssignedTeacher(s, editingAssignment?.id);
+      if (assignedTeacher && assignedTeacher.username !== teacherUsername) {
+        return false;
+      }
+
+      // Check remaining periods
+      const rem = getSubjectRemainingPeriods(s, editingAssignment?.id);
+      return rem > 0;
+    });
+  }, [classSubjects, assignments, editingAssignment, activeYear, selectedClass, teacherUsername, teachingPeriods]);
+
+  // Handle classroom selection change: recalculate subjects and sync end period
   const handleClassChange = (newClassId: string) => {
     setClassId(newClassId);
     const targetClass = classes.find((c) => c.id === newClassId || c.name === newClassId);
@@ -132,22 +225,35 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
         (s.classId && s.classId === newClassId) ||
         (targetClass && (s.classId === targetClass.id || s.className === targetClass.name))
     );
-    const available = classSubs.filter(
-      (s) => !isSubjectTakenByOtherTeacher(s, teacherUsername, editingAssignment?.id)
-    );
-    setSubjectId(available[0]?.id || '');
+    const available = classSubs.filter((s) => {
+      const assignedTeacher = getSubjectAssignedTeacher(s, editingAssignment?.id);
+      if (assignedTeacher && assignedTeacher.username !== teacherUsername) return false;
+      return getSubjectRemainingPeriods(s, editingAssignment?.id) > 0;
+    });
+    const firstSub = available[0];
+    const newSubId = firstSub?.id || '';
+    setSubjectId(newSubId);
+    const rem = firstSub ? getSubjectRemainingPeriods(firstSub, editingAssignment?.id) : 1;
+    setEndPeriodId(calculateEndPeriod(periodId, rem));
   };
 
-  // Handle teacher selection change: recalculate available subjects and adjust subjectId if needed
+  // Handle subject change: adjust end period up to remaining periods of this subject
+  const handleSubjectChange = (newSubjectId: string) => {
+    setSubjectId(newSubjectId);
+    const sub = subjects.find((s) => s.id === newSubjectId);
+    const rem = sub ? getSubjectRemainingPeriods(sub, editingAssignment?.id) : 1;
+    setEndPeriodId(calculateEndPeriod(periodId, rem));
+  };
+
+  // Handle start period change: auto-calculate end period up to remaining periods
+  const handleStartPeriodChange = (newStartId: string) => {
+    setPeriodId(newStartId);
+    setEndPeriodId(calculateEndPeriod(newStartId, remainingSubjectPeriods));
+  };
+
+  // Handle teacher selection change
   const handleTeacherChange = (newTeacherUsername: string) => {
     setTeacherUsername(newTeacherUsername);
-    const available = classSubjects.filter(
-      (s) => !isSubjectTakenByOtherTeacher(s, newTeacherUsername, editingAssignment?.id)
-    );
-    const isStillValid = available.some((s) => s.id === subjectId || s.code === subjectId);
-    if (!isStillValid) {
-      setSubjectId(available[0]?.id || '');
-    }
   };
 
   // Ensure subjectId is always valid for the selected classroom and teacher when modal is open
@@ -156,13 +262,16 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
       if (availableClassSubjects.length > 0) {
         const isValid = availableClassSubjects.some((s) => s.id === subjectId || s.code === subjectId);
         if (!isValid) {
-          setSubjectId(availableClassSubjects[0].id);
+          const firstSub = availableClassSubjects[0];
+          setSubjectId(firstSub.id);
+          const rem = getSubjectRemainingPeriods(firstSub, editingAssignment?.id);
+          setEndPeriodId(calculateEndPeriod(periodId, rem));
         }
       } else {
         setSubjectId('');
       }
     }
-  }, [isModalOpen, availableClassSubjects, subjectId]);
+  }, [isModalOpen, availableClassSubjects, subjectId, teacherUsername]);
 
   const openAddModal = () => {
     if (teachers.length === 0) {
@@ -190,15 +299,23 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
         (s.classId && s.classId === initialClassId) ||
         (initialClass && (s.classId === initialClass.id || s.className === initialClass.name))
     );
-    const availableSubs = initialClassSubs.filter(
-      (s) => !isSubjectTakenByOtherTeacher(s, firstTeacherUsername, null)
-    );
+    // Subjects not fully assigned and not assigned to another teacher
+    const availableSubs = initialClassSubs.filter((s) => {
+      const assignedTeacher = getSubjectAssignedTeacher(s, null);
+      if (assignedTeacher && assignedTeacher.username !== firstTeacherUsername) return false;
+      return getSubjectRemainingPeriods(s, null) > 0;
+    });
+
+    const firstSub = availableSubs[0];
+    const firstPeriodId = teachingPeriods[0]?.id || '';
+    const rem = firstSub ? getSubjectRemainingPeriods(firstSub, null) : 1;
 
     setEditingAssignment(null);
     setTeacherUsername(firstTeacherUsername);
     setClassId(initialClassId);
-    setSubjectId(availableSubs[0]?.id || '');
-    setPeriodId(teachingPeriods[0]?.id || '');
+    setSubjectId(firstSub?.id || '');
+    setPeriodId(firstPeriodId);
+    setEndPeriodId(calculateEndPeriod(firstPeriodId, rem));
     setDayOfWeek('จันทร์');
     setColor('#0C7C82');
     setIsModalOpen(true);
@@ -210,6 +327,24 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
     setClassId(a.classId);
     setSubjectId(a.subjectId);
     setPeriodId(a.periodId);
+
+    const sub = subjects.find((s) => s.id === a.subjectId || s.code === a.subjectCode);
+    const rem = sub ? getSubjectRemainingPeriods(sub, a.id) : 1;
+
+    if (a.endPeriodId) {
+      setEndPeriodId(a.endPeriodId);
+    } else if (sub && Number(sub.periodsPerWeek) > 1) {
+      const match = a.periodName?.match(/ถึง\s+(คาบที่\s*\d+)/);
+      if (match) {
+        const found = periods.find((p) => p.name.includes(match[1]));
+        setEndPeriodId(found?.id || calculateEndPeriod(a.periodId, Math.max(1, rem)));
+      } else {
+        setEndPeriodId(calculateEndPeriod(a.periodId, Math.max(1, rem)));
+      }
+    } else {
+      setEndPeriodId(a.periodId);
+    }
+
     setDayOfWeek(a.dayOfWeek);
     setColor(a.color || '#0C7C82');
     setIsModalOpen(true);
@@ -222,29 +357,57 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
       return;
     }
     if (!subjectId) {
-      showToast?.('warning', 'กรุณาเลือกรายวิชา หรือไม่มีรายวิชาที่ว่างสำหรับครูท่านนี้ในห้องเรียนนี้');
+      showToast?.('warning', 'กรุณาเลือกรายวิชา หรือไม่มีรายวิชาที่ว่างสำหรับมอบหมายในห้องเรียนนี้');
       return;
     }
 
     const teacher = teachers.find((t) => t.username === teacherUsername);
     const cls = classes.find((c) => c.id === classId);
     const sub = subjects.find((s) => s.id === subjectId);
-    const per = periods.find((p) => p.id === periodId);
+    const startPer = teachingPeriods.find((p) => p.id === periodId) || periods.find((p) => p.id === periodId);
+    const endPer = teachingPeriods.find((p) => p.id === endPeriodId) || startPer;
 
-    if (!teacher || !cls || !sub || !per) {
+    if (!teacher || !cls || !sub || !startPer || !endPer) {
       showToast?.('warning', 'ข้อมูลไม่ครบถ้วน กรุณาตรวจสอบรายวิชาและชั้นเรียน');
       return;
     }
 
-    // Safety check: is this subject taken by another teacher?
-    if (isSubjectTakenByOtherTeacher(sub, teacher.username, editingAssignment?.id)) {
-      const takenBy = getSubjectAssignedTeacher(sub, editingAssignment?.id);
+    // Safety check 1: is this subject assigned to another teacher?
+    const assignedTeacher = getSubjectAssignedTeacher(sub, editingAssignment?.id);
+    if (assignedTeacher && assignedTeacher.username !== teacher.username) {
       showToast?.(
         'error',
-        `ไม่สามารถบันทึกได้ เนื่องจากวิชา "${sub.code} ${sub.name}" ถูกมอบหมายให้ ${takenBy?.name || 'ครูท่านอื่น'} ไปแล้ว`
+        `ไม่สามารถบันทึกได้ เนื่องจากวิชา "${sub.code} ${sub.name}" ถูกเลือก/มอบหมายให้ ${assignedTeacher.name} ไปแล้ว`
       );
       return;
     }
+
+    // Safety check 2: check remaining quota
+    const remaining = getSubjectRemainingPeriods(sub, editingAssignment?.id);
+    if (remaining <= 0) {
+      showToast?.(
+        'error',
+        `ไม่สามารถบันทึกได้ เนื่องจากวิชา "${sub.code} ${sub.name}" ถูกมอบหมายครบ ${sub.periodsPerWeek} คาบ/สัปดาห์แล้ว`
+      );
+      return;
+    }
+
+    const startIdx = teachingPeriods.findIndex((p) => p.id === startPer.id);
+    const endIdx = teachingPeriods.findIndex((p) => p.id === endPer.id);
+    const chosenSpan = Math.max(1, endIdx - startIdx + 1);
+
+    if (chosenSpan > remaining) {
+      showToast?.(
+        'error',
+        `ไม่สามารถบันทึกได้ เนื่องจากจำนวนคาบที่เลือก (${chosenSpan} คาบ) เกินจำนวนคาบสอนที่เหลือของวิชานี้ (${remaining} คาบ)`
+      );
+      return;
+    }
+
+    const isMultiPeriod = chosenSpan > 1 && endPer && endPer.id !== startPer.id;
+    const computedPeriodName = isMultiPeriod
+      ? `${startPer.name} ถึง ${endPer.name} (${startPer.startTime}-${endPer.endTime})`
+      : `${startPer.name} (${startPer.startTime}-${startPer.endTime})`;
 
     setIsSaving(true);
     try {
@@ -257,8 +420,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
           subjectId: sub.id,
           subjectCode: sub.code,
           subjectName: sub.name,
-          periodId: per.id,
-          periodName: `${per.name} (${per.startTime}-${per.endTime})`,
+          periodId: startPer.id,
+          endPeriodId: endPer?.id || startPer.id,
+          periodName: computedPeriodName,
           dayOfWeek,
           color
         });
@@ -271,8 +435,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
           subjectId: sub.id,
           subjectCode: sub.code,
           subjectName: sub.name,
-          periodId: per.id,
-          periodName: `${per.name} (${per.startTime}-${per.endTime})`,
+          periodId: startPer.id,
+          endPeriodId: endPer?.id || startPer.id,
+          periodName: computedPeriodName,
           dayOfWeek,
           color,
           academicYearId: activeYear?.id || 'year_2569'
@@ -518,7 +683,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                 </select>
               </div>
 
-              {/* Select Subject - Filtered to show only subjects of the chosen class NOT taken by other teachers */}
+              {/* Select Subject - Filtered: ถ้ารายวิชาใดเลือกไปแล้วจะไม่แสดงให้เลือกอีก */}
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1 flex items-center justify-between">
                   <span>เลือกรายวิชา <span className="text-red-500">*</span></span>
@@ -528,7 +693,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                 </label>
                 <select
                   value={subjectId}
-                  onChange={(e) => setSubjectId(e.target.value)}
+                  onChange={(e) => handleSubjectChange(e.target.value)}
                   required
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] text-sm bg-white"
                 >
@@ -536,14 +701,27 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                     <option value="" disabled>
                       {classSubjects.length === 0
                         ? `-- ไม่มีรายวิชาของห้อง ${selectedClass?.name || ''} (กรุณาไปเพิ่มที่เมนูจัดการรายวิชา) --`
-                        : `-- ไม่มีรายวิชาที่ว่างสำหรับครูท่านนี้ --`}
+                        : `-- รายวิชาทั้งหมดในห้อง ${selectedClass?.name || ''} ถูกเลือก/มอบหมายครบแล้ว --`}
                     </option>
                   ) : (
-                    availableClassSubjects.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.code} {s.name} ({s.type}) - {s.periodsPerWeek} คาบ/สัปดาห์
-                      </option>
-                    ))
+                    availableClassSubjects.map((s) => {
+                      const total = Number(s.periodsPerWeek) || 1;
+                      const assigned = getSubjectAssignedCount(s, editingAssignment?.id);
+                      const rem = getSubjectRemainingPeriods(s, editingAssignment?.id);
+                      let badgeNote = '';
+                      if (assigned > 0 && rem > 0) {
+                        badgeNote = ` [ลงแล้ว ${assigned}/${total} คาบ • เหลือ ${rem} คาบ]`;
+                      } else if (total > 1) {
+                        badgeNote = ` [${total} คาบ/สัปดาห์ • ว่างครบ ${rem} คาบ]`;
+                      } else {
+                        badgeNote = ` [1 คาบ/สัปดาห์]`;
+                      }
+                      return (
+                        <option key={s.id} value={s.id}>
+                          {s.code} {s.name} ({s.type}){badgeNote}
+                        </option>
+                      );
+                    })
                   )}
                 </select>
 
@@ -553,46 +731,167 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                     <span>ยังไม่มีรายวิชาที่ผูกกับห้อง {selectedClass?.name} กรุณาเพิ่มรายวิชาในเมนู "จัดการรายวิชา" ก่อน</span>
                   </p>
                 )}
+                {classSubjects.length > 0 && availableClassSubjects.length === 0 && (
+                  <p className="text-[11px] text-teal-700 mt-1.5 flex items-center gap-1 bg-teal-50 p-2 rounded-lg border border-teal-200">
+                    <Info className="w-3.5 h-3.5 shrink-0" />
+                    <span>รายวิชาทั้งหมดของห้อง {selectedClass?.name} ({classSubjects.length} วิชา) ถูกมอบหมายการสอนครบตามจำนวนคาบ/สัปดาห์เรียบร้อยแล้ว</span>
+                  </p>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                {/* Select Day of Week */}
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-                    วันในสัปดาห์ <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={dayOfWeek}
-                    onChange={(e) => setDayOfWeek(e.target.value as DayOfWeek)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
-                  >
-                    {DAYS.map((d) => (
-                      <option key={d} value={d}>
-                        วัน{d}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {/* Select Day of Week and Period(s) */}
+              {totalSubjectPeriods > 1 ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                      วันในสัปดาห์ <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={dayOfWeek}
+                      onChange={(e) => setDayOfWeek(e.target.value as DayOfWeek)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82]"
+                    >
+                      {DAYS.map((d) => (
+                        <option key={d} value={d}>
+                          วัน{d}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* Select Period */}
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-                    คาบสอน <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={periodId}
-                    onChange={(e) => setPeriodId(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
-                  >
-                    {teachingPeriods.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.startTime}-{p.endTime})
-                      </option>
-                    ))}
-                  </select>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 font-bold text-slate-700">
+                        <Clock className="w-4 h-4 text-[#0C7C82]" />
+                        <span>คาบสอน คาบที่ ถึง คาบที่</span>
+                        <span className="text-red-500">*</span>
+                      </span>
+                      <span className="text-[11px] font-medium text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-md">
+                        มี {totalSubjectPeriods} คาบ/สัปดาห์ {assignedSubjectPeriods > 0 ? `(ลงแล้ว ${assignedSubjectPeriods} • เหลือ ${remainingSubjectPeriods} คาบ)` : `(เหลือ ${remainingSubjectPeriods} คาบ)`}
+                      </span>
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-3 items-center">
+                      <div>
+                        <span className="block text-[11px] text-slate-500 mb-1 font-medium">คาบเริ่มต้น</span>
+                        <select
+                          value={periodId}
+                          onChange={(e) => handleStartPeriodChange(e.target.value)}
+                          required
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82]"
+                        >
+                          {teachingPeriods.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.startTime}-{p.endTime})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <span className="block text-[11px] text-slate-500 mb-1 font-medium">ถึง คาบที่ (จำกัดตามคาบที่เหลือ)</span>
+                        <select
+                          value={endPeriodId}
+                          onChange={(e) => setEndPeriodId(e.target.value)}
+                          required
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82]"
+                        >
+                          {teachingPeriods.map((p, idx) => {
+                            const startIdx = teachingPeriods.findIndex((tp) => tp.id === periodId);
+                            const span = idx - startIdx + 1;
+                            const isBeforeStart = idx < startIdx;
+                            const exceedsRemaining = span > remainingSubjectPeriods;
+                            const isDisabled = isBeforeStart || exceedsRemaining;
+                            let spanLabel = '';
+                            if (isBeforeStart) {
+                              spanLabel = ' (ก่อนคาบเริ่มต้น)';
+                            } else if (exceedsRemaining) {
+                              spanLabel = ` (เกินโควตาที่เหลือ ${remainingSubjectPeriods} คาบ)`;
+                            } else {
+                              spanLabel = ` [เลือก ${span} คาบ]`;
+                            }
+                            return (
+                              <option key={p.id} value={p.id} disabled={isDisabled}>
+                                {p.name} ({p.startTime}-{p.endTime}){spanLabel}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 p-2.5 rounded-xl bg-teal-50/80 border border-teal-100 text-xs text-teal-900 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-3.5 h-3.5 text-[#0C7C82] shrink-0" />
+                        <span>
+                          คาบสอน: <strong>{startPeriod?.name || 'คาบแรก'}</strong> ถึง <strong>{endPeriod?.name || 'คาบสุดท้าย'}</strong>
+                          {' '}(รวม <strong>{currentSpan}</strong> คาบ)
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-mono text-teal-700 bg-white px-2 py-0.5 rounded border border-teal-200">
+                          {startPeriod?.startTime || ''} - {endPeriod?.endTime || ''} น.
+                        </span>
+                        {remainingSubjectPeriods - currentSpan === 0 ? (
+                          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-md border border-emerald-300">
+                            ✓ ครบ {totalSubjectPeriods} คาบพอดี
+                          </span>
+                        ) : remainingSubjectPeriods - currentSpan > 0 ? (
+                          <span className="text-[10px] font-semibold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-md border border-amber-300">
+                            เหลืออีก {remainingSubjectPeriods - currentSpan} คาบ
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-red-700 bg-red-100 px-2 py-0.5 rounded-md">
+                            เกินโควตา
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Select Day of Week */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                      วันในสัปดาห์ <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={dayOfWeek}
+                      onChange={(e) => setDayOfWeek(e.target.value as DayOfWeek)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82]"
+                    >
+                      {DAYS.map((d) => (
+                        <option key={d} value={d}>
+                          วัน{d}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Select Period */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                      คาบสอน <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={periodId}
+                      onChange={(e) => {
+                        setPeriodId(e.target.value);
+                        setEndPeriodId(e.target.value);
+                      }}
+                      required
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82]"
+                    >
+                      {teachingPeriods.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.startTime}-{p.endTime})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               {/* Color picker */}
               <div>
