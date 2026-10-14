@@ -72,17 +72,17 @@ export async function testConnection() {
 
 // Default initial system settings
 export const DEFAULT_SETTINGS: SystemSettings = {
-  schoolName: 'โรงเรียนอนุบาลหนองหานวิทยายน',
+  schoolName: 'โรงเรียนอนุบาลศรีสุทโธ',
   affiliationName: 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษาอุดรธานี เขต 3',
   logoUrl: '',
 };
 
-// Clean empty defaults (no sample data)
+// Clean empty defaults
 export const DEFAULT_ACADEMIC_YEARS: AcademicYear[] = [];
 export const DEFAULT_PERIODS: Period[] = [];
 export const DEFAULT_CLASSES: Classroom[] = [];
 
-// Single master admin account for initial login
+// Single master admin account for initial login if no users exist
 export const DEFAULT_USERS: AppUser[] = [
   { id: 'u_admin', username: 'admin', password: 'admin123', fullName: 'ผู้ดูแลระบบ', role: 'admin' },
 ];
@@ -92,8 +92,38 @@ export const DEFAULT_SUBJECTS: Subject[] = [];
 export const DEFAULT_ASSIGNMENTS: TeachingAssignment[] = [];
 
 /**
- * Purge all sample data from both Firestore and local system.
- * Keeps only the master admin user so administrators can access the system.
+ * Initialize system without deleting existing data.
+ * Keeps all data in the database permanently across reboots and reloads.
+ */
+export async function initSystem() {
+  try {
+    // Only create admin if appUsers collection is completely empty
+    const userSnap = await getDocs(collection(db, 'appUsers'));
+    if (userSnap.empty) {
+      await setDoc(doc(db, 'appUsers', 'u_admin'), {
+        id: 'u_admin',
+        username: 'admin',
+        password: 'admin123',
+        fullName: 'ผู้ดูแลระบบ',
+        role: 'admin'
+      });
+      console.log('Initialized master admin account.');
+    }
+
+    // Only create default settings if settings collection is completely empty
+    const settingsSnap = await getDocs(collection(db, 'settings'));
+    if (settingsSnap.empty) {
+      await setDoc(doc(db, 'settings', 'config'), DEFAULT_SETTINGS);
+      console.log('Initialized default system settings.');
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'initSystem');
+  }
+}
+
+/**
+ * Manual purge action: called ONLY when the administrator explicitly
+ * clicks "ลบข้อมูลทั้งหมด" in System Settings and confirms.
  */
 export async function purgeAllSampleData() {
   try {

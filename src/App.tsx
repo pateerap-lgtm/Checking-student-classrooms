@@ -13,6 +13,7 @@ import {
 import {
   db,
   testConnection,
+  initSystem,
   purgeAllSampleData,
   DEFAULT_SETTINGS,
   DEFAULT_ACADEMIC_YEARS,
@@ -154,8 +155,8 @@ export default function App() {
   // Initialize and attach Firestore real-time listeners
   useEffect(() => {
     testConnection();
-    // Purge all sample data from both system and database
-    purgeAllSampleData();
+    // Initialize system settings and admin account safely without modifying existing database data
+    initSystem();
 
     // Listen to Settings
     const unsubSettings = onSnapshot(doc(db, 'settings', 'config'), (snap) => {
@@ -602,7 +603,7 @@ export default function App() {
                   ระบบเช็คชื่อนักเรียนสำหรับรายวิชา
                 </h1>
                 <p className="text-[11px] text-slate-500 truncate max-w-xs">
-                  {settings.schoolName || 'โรงเรียนอนุบาลหนองหานวิทยายน'}
+                  {settings.schoolName || 'โรงเรียนอนุบาลศรีสุทโธ'}
                 </p>
               </div>
             </div>

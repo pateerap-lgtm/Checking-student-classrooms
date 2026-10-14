@@ -562,7 +562,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
         {/* Official Document Header */}
         <div className="text-center pb-3 mb-3 border-b-2 border-slate-800 space-y-1">
           <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
-            {settings.schoolName || 'โรงเรียนอนุบาลหนองหานวิทยายน'}
+            {settings.schoolName || 'โรงเรียนอนุบาลศรีสุทโธ'}
           </h2>
           <p className="text-xs text-slate-700 leading-tight">
             {settings.affiliationName || 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษาอุดรธานี เขต 3'}
