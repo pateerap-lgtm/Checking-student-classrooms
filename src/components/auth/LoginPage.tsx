@@ -77,12 +77,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     }, 400);
   };
 
-  const fillQuickAccount = (u: string, p: string) => {
-    setUsername(u);
-    setPassword(p);
-    setError(null);
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-teal-50/40 to-slate-100 flex items-center justify-center p-4 sm:p-6 lg:p-8">
       <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col md:flex-row">
@@ -211,18 +205,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               </button>
             </div>
           </form>
-
-          {/* Administrator Login Guide */}
-          <div className="mt-6 pt-5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>เข้าสู่ระบบครั้งแรกด้วยบัญชีผู้ดูแลระบบ:</span>
-            <button
-              type="button"
-              onClick={() => fillQuickAccount('admin', 'admin123')}
-              className="px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold cursor-pointer transition-colors"
-            >
-              admin / admin123
-            </button>
-          </div>
         </div>
       </div>
     </div>
