@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ClipboardCheck,
   Calendar,
@@ -46,6 +46,8 @@ interface TeacherAttendanceViewProps {
   students: Student[];
   attendanceLogs: AttendanceLog[];
   activeYear?: AcademicYear;
+  pendingAssignment?: TeachingAssignment | null;
+  onClearPendingAssignment?: () => void;
   onSaveAttendance: (log: Omit<AttendanceLog, 'id'>) => Promise<void>;
   onUpdateAttendance: (id: string, log: Partial<AttendanceLog>) => Promise<void>;
   onDeleteAttendance: (id: string) => Promise<void>;
@@ -63,6 +65,8 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
   students,
   attendanceLogs,
   activeYear,
+  pendingAssignment,
+  onClearPendingAssignment,
   onSaveAttendance,
   onUpdateAttendance,
   onDeleteAttendance,
@@ -93,6 +97,45 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
 
   // Teacher logs
   const teacherLogs = attendanceLogs.filter((l) => l.teacherUsername === teacherUsername);
+
+  // Auto-open modal when navigating from Dashboard with pendingAssignment
+  useEffect(() => {
+    if (pendingAssignment) {
+      const today = getTodayISODate();
+      setSelectedDate(today);
+      setActiveAssignment(pendingAssignment);
+
+      const existingLog = teacherLogs.find(
+        (l) =>
+          l.date === today &&
+          l.subjectId === pendingAssignment.subjectId &&
+          l.classId === pendingAssignment.classId &&
+          l.periodId === pendingAssignment.periodId
+      );
+
+      if (existingLog) {
+        setEditingLogId(existingLog.id);
+        setStudentRecords(existingLog.records);
+      } else {
+        setEditingLogId(null);
+        const classStudents = students
+          .filter((s) => s.classId === pendingAssignment.classId || s.className === pendingAssignment.className)
+          .sort((a, b) => a.seq - b.seq);
+
+        const initialRecords: StudentAttendanceItem[] = classStudents.map((s, idx) => ({
+          studentId: s.id,
+          seq: s.seq || idx + 1,
+          studentName: s.name,
+          status: 'present' as AttendanceStatus,
+        }));
+
+        setStudentRecords(initialRecords);
+      }
+
+      setIsCheckModalOpen(true);
+      onClearPendingAssignment?.();
+    }
+  }, [pendingAssignment]);
 
   // Open attendance modal for a timetable slot
   const handleSlotClick = (assignment: TeachingAssignment, slotDay: DayOfWeek) => {

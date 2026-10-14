@@ -9,7 +9,14 @@ import {
   AlertCircle,
   HelpCircle,
   ChevronDown,
-  Sparkles
+  Sparkles,
+  Users,
+  User,
+  ArrowLeft,
+  Award,
+  Clock,
+  ShieldCheck,
+  CheckCircle2
 } from 'lucide-react';
 import {
   AttendanceLog,
@@ -26,6 +33,7 @@ import {
 import {
   THAI_MONTHS_FULL,
   formatToThaiBE,
+  formatThaiFullDate,
   getAcademicYearMonths,
   getDayOfWeekFromDate
 } from '../../utils/thaiDate';
@@ -42,6 +50,9 @@ interface TeacherReportViewProps {
   activeYear?: AcademicYear;
   onUpdateAttendance?: (id: string, log: Partial<AttendanceLog>) => Promise<void>;
   onSaveAttendance?: (log: Omit<AttendanceLog, 'id'>) => Promise<void>;
+  initialStudentId?: string | null;
+  initialClassId?: string | null;
+  onClearInitialStudent?: () => void;
 }
 
 export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
@@ -55,9 +66,18 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
   teacherFullName,
   activeYear,
   onUpdateAttendance,
-  onSaveAttendance
+  onSaveAttendance,
+  initialStudentId,
+  initialClassId,
+  onClearInitialStudent
 }) => {
-  // 1. Filter ONLY classrooms that this teacher teaches ("ให้แสดงเฉพาะชั้นเรียนที่สอน")
+  // Report Mode: 'class' = ทั้งชั้นเรียน (Class Attendance Sheet), 'individual' = รายบุคคล (Individual Student Slip)
+  const [reportMode, setReportMode] = useState<'class' | 'individual'>('class');
+
+  // Scope when printing individual reports: 'single' = เฉพาะคนนี้, 'all' = พิมพ์ทุกคนในห้อง (แยกคนละหน้า)
+  const [individualScope, setIndividualScope] = useState<'single' | 'all'>('single');
+
+  // 1. Filter ONLY classrooms that this teacher teaches
   const teacherClasses = useMemo(() => {
     const myAssignments = assignments.filter((a) => a.teacherUsername === teacherUsername);
     const classIds = new Set(myAssignments.map((a) => a.classId));
@@ -83,7 +103,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
     return teacherClasses.find((c) => c.id === selectedClassId || c.name === selectedClassId) || teacherClasses[0];
   }, [teacherClasses, selectedClassId]);
 
-  // 2. Filter ONLY subjects that this teacher teaches for the selected classroom ("และรายวิชาที่สอนเท่านั้น")
+  // 2. Filter ONLY subjects that this teacher teaches for the selected classroom
   const teacherSubjects = useMemo(() => {
     if (!currentClass) return [];
     const myClassAssignments = assignments.filter(
@@ -117,7 +137,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
     return teacherSubjects.find((s) => s.id === selectedSubjectId || s.code === selectedSubjectId) || teacherSubjects[0];
   }, [teacherSubjects, selectedSubjectId]);
 
-  // 3. Available months in the active academic year only ("เดือนในช่วงที่ตั้งปีการศึกษาเท่านั้น เช่น ตุลาคม 2569")
+  // 3. Available months in the active academic year only
   const availableMonths = useMemo(() => {
     return getAcademicYearMonths(activeYear);
   }, [activeYear]);
@@ -169,6 +189,34 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
       .sort((a, b) => a.seq - b.seq);
   }, [students, currentClass]);
 
+  // Selected student for individual report
+  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
+
+  // Auto-sync selectedStudentId when classStudents changes
+  useEffect(() => {
+    if (classStudents.length > 0) {
+      if (!selectedStudentId || !classStudents.some((s) => s.id === selectedStudentId)) {
+        setSelectedStudentId(classStudents[0].id);
+      }
+    }
+  }, [classStudents, selectedStudentId]);
+
+  // Sync initial student and class if passed via props
+  useEffect(() => {
+    if (initialClassId && teacherClasses.some((c) => c.id === initialClassId)) {
+      setSelectedClassId(initialClassId);
+    }
+    if (initialStudentId) {
+      setSelectedStudentId(initialStudentId);
+      setReportMode('individual');
+      onClearInitialStudent?.();
+    }
+  }, [initialStudentId, initialClassId, teacherClasses, onClearInitialStudent]);
+
+  const currentStudent = useMemo(() => {
+    return classStudents.find((s) => s.id === selectedStudentId) || classStudents[0];
+  }, [classStudents, selectedStudentId]);
+
   // Teaching days of the week for this class and subject from assignments
   const assignedDaysOfWeek = useMemo(() => {
     if (!currentClass || !currentSubject) return new Set<DayOfWeek>();
@@ -206,15 +254,12 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
     );
   }, [assignments, teacherUsername, currentClass, currentSubject]);
 
-  // Determine all teaching dates in this month:
-  // Shows ONLY days that have scheduled teaching or recorded attendance ("แสดงเฉพาะวันที่มีสอน")
+  // Determine all teaching dates in this month
   const teachingDates = useMemo(() => {
     const datesSet = new Set<string>();
 
-    // Add any dates where attendance was already recorded
     monthLogs.forEach((l) => datesSet.add(l.date));
 
-    // If assignments specify days of week, calculate all dates in that month that fall on those days
     if (selectedMonth && assignedDaysOfWeek.size > 0) {
       const parts = selectedMonth.split('-');
       const year = Number(parts[0]);
@@ -263,7 +308,6 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
   ) => {
     if (!currentClass || !currentSubject) return;
 
-    // Find existing log for this date, class, subject
     const existingLog = monthLogs.find((l) => l.date === dateStr);
 
     if (existingLog && onUpdateAttendance) {
@@ -300,7 +344,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
         studentId: std.id,
         seq: std.seq || idx + 1,
         studentName: std.name,
-        status: std.id === student.id ? newStatus : 'present'
+        status: std.id === student.id ? newStatus : ('present' as AttendanceStatus)
       }));
 
       const summary = initialRecords.reduce(
@@ -313,7 +357,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
       );
 
       await onSaveAttendance({
-        academicYearId: activeYear?.id || 'year_2569',
+        academicYearId: activeYear?.id || '',
         subjectId: currentSubject.id,
         subjectCode: currentSubject.code,
         subjectName: currentSubject.name,
@@ -322,7 +366,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
         date: dateStr,
         thaiDateStr: formatToThaiBE(dateStr),
         dayOfWeek,
-        periodId: matchedAssignment?.periodId || 'p1',
+        periodId: matchedAssignment?.periodId || '',
         periodName: matchedAssignment?.periodName || 'คาบสอน',
         teacherUsername,
         teacherName: teacherFullName,
@@ -335,7 +379,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
     setActiveCellEdit(null);
   };
 
-  // Calculate per-student stats in this month
+  // Calculate per-student stats (row totals)
   const studentStats = useMemo(() => {
     return classStudents.map((std) => {
       let present = 0;
@@ -343,31 +387,20 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
       let late = 0;
       let sick = 0;
       let leave = 0;
-      let totalCounted = 0;
 
       teachingDates.forEach((date) => {
         const dateMap = attendanceMatrix.get(date);
         if (dateMap) {
-          const status = dateMap.get(std.id) || dateMap.get(std.name);
-          if (status === 'present') {
-            present++;
-            totalCounted++;
-          } else if (status === 'absent') {
-            absent++;
-            totalCounted++;
-          } else if (status === 'late') {
-            late++;
-            totalCounted++;
-          } else if (status === 'sick') {
-            sick++;
-            totalCounted++;
-          } else if (status === 'leave') {
-            leave++;
-            totalCounted++;
-          }
+          const st = dateMap.get(std.id) || dateMap.get(std.name);
+          if (st === 'present') present++;
+          else if (st === 'absent') absent++;
+          else if (st === 'late') late++;
+          else if (st === 'sick') sick++;
+          else if (st === 'leave') leave++;
         }
       });
 
+      const totalCounted = present + absent + late + sick + leave;
       const rate = totalCounted > 0 ? Math.round((present / totalCounted) * 100) : 0;
 
       return {
@@ -417,11 +450,12 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
     return totals;
   }, [teachingDates, attendanceMatrix, classStudents]);
 
+  // Print / Export PDF Handler
   const handlePrint = () => {
     window.print();
   };
 
-  // Helper for cell rendering: มาเรียน=เครื่องหมายถูก (✓), ขาด=ข ,สาย=ส,ป่วย=ป,กิจ=ก
+  // Helper for cell rendering
   const renderStatusSymbol = (status?: AttendanceStatus) => {
     switch (status) {
       case 'present':
@@ -439,6 +473,280 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
     }
   };
 
+  // Render an Individual Student Slip (Used for single or batch print)
+  const renderIndividualSlip = (student: Student, studentIndex: number) => {
+    const stats = studentStats[studentIndex] || {
+      present: 0,
+      absent: 0,
+      late: 0,
+      sick: 0,
+      leave: 0,
+      totalCounted: 0,
+      rate: 0
+    };
+
+    const isPassedStandard = stats.rate >= 80;
+
+    return (
+      <div
+        key={student.id}
+        className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm print:p-0 print:border-none print:shadow-none print:w-full space-y-5 page-break print:break-after-page"
+      >
+        {/* Official Header */}
+        <div className="text-center pb-3 border-b-2 border-slate-800 space-y-1">
+          <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+            {settings.schoolName || 'โรงเรียนอนุบาลศรีสุทโธ'}
+          </h2>
+          <p className="text-xs text-slate-700 leading-tight">
+            {settings.affiliationName || 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษาอุดรธานี เขต 3'}
+          </p>
+          <h3 className="text-sm font-bold text-[#0C7C82] print:text-black pt-1">
+            รายงานเวลาเรียนและประวัติการเข้าเรียนรายบุคคล (แบบ ปพ.5)
+          </h3>
+          <p className="text-xs text-slate-500 font-medium">
+            ประจำเดือน{selectedMonthLabel} ปีการศึกษา {activeYear?.name || '2569'}
+          </p>
+        </div>
+
+        {/* Student & Course Profile Box */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-800 print:bg-transparent print:border-slate-400 print:p-3">
+          <div className="space-y-1.5">
+            <div>
+              <span className="text-slate-500">ชื่อ-นามสกุล: </span>
+              <strong className="text-slate-900 text-sm">{student.name}</strong>
+            </div>
+            <div>
+              <span className="text-slate-500">เลขที่: </span>
+              <strong>{student.seq || studentIndex + 1}</strong>
+              <span className="text-slate-500 ml-3">รหัสประจำตัว: </span>
+              <strong className="font-mono">{student.username || '-'}</strong>
+            </div>
+            <div>
+              <span className="text-slate-500">ชั้นเรียน: </span>
+              <strong>ห้อง {currentClass?.name || '-'}</strong>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <div>
+              <span className="text-slate-500">รายวิชา: </span>
+              <strong className="text-slate-900">
+                {currentSubject ? `${currentSubject.code} ${currentSubject.name}` : '-'}
+              </strong>
+            </div>
+            <div>
+              <span className="text-slate-500">ประเภทวิชา: </span>
+              <span>{currentSubject?.type || '-'}</span>
+              <span className="text-slate-500 ml-3">จำนวน: </span>
+              <span>{currentSubject?.periodsPerWeek || '-'} คาบ/สัปดาห์</span>
+            </div>
+            <div>
+              <span className="text-slate-500">ครูผู้สอน: </span>
+              <strong>{teacherFullName}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* Attendance Summary Stat Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center">
+          <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 print:border-slate-400 print:bg-transparent">
+            <div className="text-[11px] text-emerald-800 font-medium">มาเรียน</div>
+            <div className="text-lg font-bold text-emerald-700">{stats.present}</div>
+            <div className="text-[10px] text-emerald-600">วัน/คาบ</div>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 print:border-slate-400 print:bg-transparent">
+            <div className="text-[11px] text-red-800 font-medium">ขาดเรียน</div>
+            <div className="text-lg font-bold text-red-600">{stats.absent}</div>
+            <div className="text-[10px] text-red-500">วัน/คาบ</div>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 print:border-slate-400 print:bg-transparent">
+            <div className="text-[11px] text-amber-800 font-medium">มาสาย</div>
+            <div className="text-lg font-bold text-amber-600">{stats.late}</div>
+            <div className="text-[10px] text-amber-500">วัน/คาบ</div>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-sky-50 border border-sky-200 print:border-slate-400 print:bg-transparent">
+            <div className="text-[11px] text-sky-800 font-medium">ลาป่วย</div>
+            <div className="text-lg font-bold text-sky-600">{stats.sick}</div>
+            <div className="text-[10px] text-sky-500">วัน/คาบ</div>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-orange-50 border border-orange-200 print:border-slate-400 print:bg-transparent">
+            <div className="text-[11px] text-orange-800 font-medium">ลากิจ</div>
+            <div className="text-lg font-bold text-orange-600">{stats.leave}</div>
+            <div className="text-[10px] text-orange-500">วัน/คาบ</div>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-slate-100 border border-slate-300 print:border-slate-400 print:bg-transparent">
+            <div className="text-[11px] text-slate-800 font-medium">ร้อยละเวลาเรียน</div>
+            <div className="text-lg font-extrabold text-slate-900">{stats.rate}%</div>
+            <div className="text-[10px] font-bold text-[#0C7C82]">
+              {isPassedStandard ? '✓ ผ่านเกณฑ์' : '⚠️ ต่ำกว่า 80%'}
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed Daily Attendance Records Table */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-[#0C7C82]" />
+              <span>ประวัติการเข้าเรียนรายวันในเดือนนี้ ({teachingDates.length} คาบ/วัน)</span>
+            </h4>
+            <span className="text-[11px] text-slate-500">
+              รวมเวลาเรียนที่เปิดสอน: {stats.totalCounted} คาบ
+            </span>
+          </div>
+
+          <table className="w-full text-center border-collapse border border-slate-600 text-xs text-slate-900 print:text-[9.5px]">
+            <thead>
+              <tr className="bg-slate-100 text-slate-900 font-bold">
+                <th className="py-1.5 px-2 border border-slate-600 w-12 text-center">ลำดับ</th>
+                <th className="py-1.5 px-3 border border-slate-600 text-left">วันที่สอน</th>
+                <th className="py-1.5 px-3 border border-slate-600 text-center w-28">วันในสัปดาห์</th>
+                <th className="py-1.5 px-3 border border-slate-600 text-center w-32">สถานะการเข้าเรียน</th>
+                <th className="py-1.5 px-3 border border-slate-600 text-left">หมายเหตุ / สภาพการมาเรียน</th>
+              </tr>
+            </thead>
+            <tbody>
+              {teachingDates.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-6 text-center text-slate-400 border border-slate-600">
+                    ไม่มีรายการคาบสอนในเดือน {selectedMonthLabel}
+                  </td>
+                </tr>
+              ) : (
+                teachingDates.map((dateStr, idx) => {
+                  const dateMap = attendanceMatrix.get(dateStr);
+                  const status = dateMap?.get(student.id) || dateMap?.get(student.name);
+                  const dayOfWeek = getDayOfWeekFromDate(dateStr) || '-';
+
+                  let statusBadge = (
+                    <span className="px-2 py-0.5 rounded text-[11px] font-bold text-slate-400">
+                      - ยังไม่ได้บันทึก
+                    </span>
+                  );
+
+                  if (status === 'present') {
+                    statusBadge = (
+                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                        ✓ มาเรียน
+                      </span>
+                    );
+                  } else if (status === 'absent') {
+                    statusBadge = (
+                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-800">
+                        ข ขาดเรียน
+                      </span>
+                    );
+                  } else if (status === 'late') {
+                    statusBadge = (
+                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800">
+                        ส มาสาย
+                      </span>
+                    );
+                  } else if (status === 'sick') {
+                    statusBadge = (
+                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-100 text-sky-800">
+                        ป ลาป่วย
+                      </span>
+                    );
+                  } else if (status === 'leave') {
+                    statusBadge = (
+                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-orange-100 text-orange-800">
+                        ก ลากิจ
+                      </span>
+                    );
+                  }
+
+                  return (
+                    <tr key={dateStr} className="hover:bg-slate-50/50">
+                      <td className="py-1 px-2 border border-slate-600 font-semibold">{idx + 1}</td>
+                      <td className="py-1 px-3 border border-slate-600 text-left font-medium">
+                        {formatToThaiBE(dateStr)}
+                      </td>
+                      <td className="py-1 px-3 border border-slate-600 text-center">
+                        วัน{dayOfWeek}
+                      </td>
+                      <td className="py-1 px-3 border border-slate-600 text-center font-bold">
+                        {statusBadge}
+                      </td>
+                      <td className="py-1 px-3 border border-slate-600 text-left text-slate-500 text-[11px]">
+                        {status === 'present'
+                          ? 'เข้าเรียนตามเวลาปกติ'
+                          : status === 'absent'
+                          ? 'ไม่มาเรียนโดยไม่แจ้งสาเหตุ'
+                          : status === 'late'
+                          ? 'เข้าเรียนหลังเวลาเริ่มคาบ'
+                          : status === 'sick'
+                          ? 'มีใบลาป่วยถูกต้อง'
+                          : status === 'leave'
+                          ? 'มีใบลากิจถูกต้อง'
+                          : '-'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Evaluation Summary Note */}
+        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 print:bg-transparent print:border-slate-400">
+          <strong>สรุปผลการประเมินเวลาเรียน: </strong>
+          {isPassedStandard ? (
+            <span className="text-emerald-700 font-bold">
+              มีเวลาเรียนร้อยละ {stats.rate}% ผ่านเกณฑ์การประเมินเวลาเรียนขั้นต่ำ (80%) มีสิทธิ์ได้รับการประเมินผลการเรียน
+            </span>
+          ) : (
+            <span className="text-red-600 font-bold">
+              มีเวลาเรียนร้อยละ {stats.rate}% ต่ำกว่าเกณฑ์มาตรฐาน (ต่ำกว่า 80%) อยู่ในกลุ่มเฝ้าระวังและต้องติดตามแก้ไขเวลาเรียน
+            </span>
+          )}
+        </div>
+
+        {/* 3-Signatory Block: Teacher, Academic Head, Parent */}
+        <div className="grid grid-cols-3 gap-4 pt-6 text-center text-xs text-slate-800 print:pt-4 print:break-inside-avoid">
+          <div className="space-y-4">
+            <p className="leading-relaxed">
+              ลงชื่อ........................................................
+            </p>
+            <p className="font-semibold">({teacherFullName})</p>
+            <p className="text-[11px] text-slate-500">ครูผู้สอน</p>
+            <p className="text-[11px] text-slate-400">
+              วันที่........./........./..........
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <p className="leading-relaxed">
+              ลงชื่อ........................................................
+            </p>
+            <p className="font-semibold">(........................................................)</p>
+            <p className="text-[11px] text-slate-500">หัวหน้าฝ่ายวิชาการ / ผู้บริหาร</p>
+            <p className="text-[11px] text-slate-400">
+              วันที่........./........./..........
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <p className="leading-relaxed">
+              ลงชื่อ........................................................
+            </p>
+            <p className="font-semibold">(........................................................)</p>
+            <p className="text-[11px] text-slate-500">ผู้ปกครองนักเรียน (รับทราบ)</p>
+            <p className="text-[11px] text-slate-400">
+              วันที่........./........./..........
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 font-['Sarabun',sans-serif]">
       {/* Explicit Print Page Settings: A4 Portrait with Narrow Margin */}
@@ -451,6 +759,10 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
           @page {
             size: A4 portrait !important;
             margin: 0.5cm !important;
+          }
+          .page-break {
+            page-break-after: always !important;
+            break-after: page !important;
           }
           html, body {
             background: white !important;
@@ -472,18 +784,55 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
               <span>รายงานสรุปการเช็คชื่อรายวิชา</span>
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              ตารางสรุปการเช็คชื่อรายบุคคลตามวันที่สอนจริงในแต่ละเดือน (เฉพาะชั้นเรียนและรายวิชาที่สอน)
+              ตารางสรุปการเช็คชื่อรายบุคคลตามวันที่สอนจริงในแต่ละเดือน และ Export รายงานเป็นไฟล์ PDF
             </p>
           </div>
 
+          {/* Mode Switcher & Export PDF Button */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* Report Mode Tabs: Class vs Individual */}
+            <div className="p-1 rounded-2xl bg-slate-100 flex items-center gap-1 border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setReportMode('class')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  reportMode === 'class'
+                    ? 'bg-white text-[#0C7C82] shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>รายงานทั้งชั้นเรียน</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setReportMode('individual')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  reportMode === 'individual'
+                    ? 'bg-white text-[#0C7C82] shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>รายงานนักเรียนรายบุคคล</span>
+              </button>
+            </div>
+
+            {/* Print / Export PDF Button */}
             <button
               onClick={handlePrint}
               disabled={teacherClasses.length === 0 || teacherSubjects.length === 0}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-medium bg-gradient-to-r from-[#0C7C82] to-[#35B4B0] hover:from-[#096368] hover:to-[#2ba09c] shadow-md shadow-[#0C7C82]/20 cursor-pointer text-sm disabled:opacity-50"
             >
               <Printer className="w-4 h-4" />
-              <span>พิมพ์รายงาน / บันทึกเป็น PDF (แนวตั้ง ระยะขอบแคบ)</span>
+              <span>
+                {reportMode === 'class'
+                  ? 'พิมพ์ / บันทึก PDF ทั้งชั้นเรียน'
+                  : individualScope === 'all'
+                  ? `พิมพ์ / บันทึก PDF ทุกคน (${classStudents.length} หน้า)`
+                  : 'พิมพ์ / บันทึก PDF รายบุคคล'}
+              </span>
             </button>
           </div>
         </div>
@@ -565,304 +914,399 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
           </div>
         )}
 
+        {/* Sub-controls when in 'individual' mode */}
+        {reportMode === 'individual' && classStudents.length > 0 && (
+          <div className="p-4 rounded-2xl bg-teal-50/60 border border-teal-200 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-teal-900 mb-1.5">
+                เลือกนักเรียนที่ต้องการดู / Export รายงาน:
+              </label>
+              <select
+                value={selectedStudentId}
+                onChange={(e) => setSelectedStudentId(e.target.value)}
+                className="w-full px-4 py-2 rounded-xl border border-teal-300 text-sm font-semibold text-slate-900 bg-white focus:ring-2 focus:ring-[#0C7C82] cursor-pointer"
+              >
+                {classStudents.map((std, idx) => {
+                  const stats = studentStats[idx];
+                  return (
+                    <option key={std.id} value={std.id}>
+                      เลขที่ {std.seq || idx + 1}: {std.name} ({std.username || '-'}) — มาเรียน {stats?.rate || 0}%
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-teal-900 mb-1.5">
+                ตัวเลือกการพิมพ์ / Export PDF:
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIndividualScope('single')}
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold border cursor-pointer transition-all ${
+                    individualScope === 'single'
+                      ? 'bg-[#0C7C82] text-white border-[#0C7C82] shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  เฉพาะคนนี้ ({currentStudent?.name?.split(' ')[0] || 'ที่เลือก'})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIndividualScope('all')}
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold border cursor-pointer transition-all ${
+                    individualScope === 'all'
+                      ? 'bg-[#0C7C82] text-white border-[#0C7C82] shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  พิมพ์ทุกคนในห้อง ({classStudents.length} คน แยกหน้า)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Tip for Interactive Checking and Printing */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl">
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-[#0C7C82]" />
             <span>
-              <strong>การเช็คชื่อ:</strong> สามารถคลิกที่ช่องวันที่ของนักเรียนเพื่อเช็คชื่อหรือเปลี่ยนสถานะได้โดยตรง
+              <strong>ระบบ Export PDF:</strong> เลือกรูปแบบที่ต้องการ (ทั้งชั้นเรียน หรือ รายบุคคล) แล้วคลิกปุ่ม &quot;พิมพ์ / บันทึก PDF&quot; เพื่อบันทึกเป็นเอกสาร A4 แนวตั้ง
             </span>
           </div>
-          <div className="text-[10px] text-slate-400">
-            เอกสารพิมพ์ถูกจัดรูปแบบตามมาตรฐาน A4 แนวตั้ง (Portrait) ระยะขอบแคบ (Narrow Margin)
+          <div className="text-[10px] text-slate-400 font-medium">
+            มาตรฐาน A4 แนวตั้ง (Portrait) ระยะขอบแคบ 0.5 ซม.
           </div>
         </div>
       </div>
 
-      {/* Official Report Document Container (Formatted for screen and Portrait A4 PDF print) */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm print:p-0 print:border-none print:shadow-none print:w-full overflow-hidden">
-        {/* Official Document Header */}
-        <div className="text-center pb-3 mb-3 border-b-2 border-slate-800 space-y-1">
-          <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
-            {settings.schoolName || 'โรงเรียนอนุบาลศรีสุทโธ'}
-          </h2>
-          <p className="text-xs text-slate-700 leading-tight">
-            {settings.affiliationName || 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษาอุดรธานี เขต 3'}
-          </p>
-          <h3 className="text-sm font-bold text-[#0C7C82] print:text-black pt-1">
-            รายงานสรุปการเช็คชื่อการเข้าเรียนของนักเรียนสำหรับรายวิชา (แบบ ปพ.5)
-          </h3>
+      {/* VIEW 1: ทั้งชั้นเรียน (CLASS ATTENDANCE SHEET) */}
+      {reportMode === 'class' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm print:p-0 print:border-none print:shadow-none print:w-full overflow-hidden">
+          {/* Official Document Header */}
+          <div className="text-center pb-3 mb-3 border-b-2 border-slate-800 space-y-1">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+              {settings.schoolName || 'โรงเรียนอนุบาลศรีสุทโธ'}
+            </h2>
+            <p className="text-xs text-slate-700 leading-tight">
+              {settings.affiliationName || 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษาอุดรธานี เขต 3'}
+            </p>
+            <h3 className="text-sm font-bold text-[#0C7C82] print:text-black pt-1">
+              รายงานสรุปการเช็คชื่อการเข้าเรียนของนักเรียนสำหรับรายวิชา (แบบ ปพ.5)
+            </h3>
 
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-xs text-slate-800 pt-1 font-medium">
-            <span>
-              <strong>รายวิชา:</strong> {currentSubject ? `${currentSubject.code} ${currentSubject.name}` : '-'}
-            </span>
-            <span>
-              <strong>ชั้นเรียน:</strong> {currentClass?.name || '-'}
-            </span>
-            <span>
-              <strong>ประจำเดือน:</strong> {selectedMonthLabel}
-            </span>
-            <span>
-              <strong>ปีการศึกษา:</strong> {activeYear?.name || '2569'}
-            </span>
-            <span>
-              <strong>ครูผู้สอน:</strong> {teacherFullName}
-            </span>
+            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-xs text-slate-800 pt-1 font-medium">
+              <span>
+                <strong>รายวิชา:</strong> {currentSubject ? `${currentSubject.code} ${currentSubject.name}` : '-'}
+              </span>
+              <span>
+                <strong>ชั้นเรียน:</strong> {currentClass?.name || '-'}
+              </span>
+              <span>
+                <strong>ประจำเดือน:</strong> {selectedMonthLabel}
+              </span>
+              <span>
+                <strong>ปีการศึกษา:</strong> {activeYear?.name || '2569'}
+              </span>
+              <span>
+                <strong>ครูผู้สอน:</strong> {teacherFullName}
+              </span>
+            </div>
           </div>
-        </div>
 
-        {/* Legend Guide Bar */}
-        <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-700 mb-2.5 px-3 py-1 bg-slate-50 border border-slate-300 rounded-xl print:border-none print:bg-transparent print:px-0">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-medium">
-            <span className="font-bold text-slate-800">คำอธิบายสัญลักษณ์:</span>
-            <span className="inline-flex items-center gap-1">
-              <strong className="text-emerald-700 font-extrabold text-xs">✓</strong> = มาเรียน
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <strong className="text-red-600 font-bold text-xs">ข</strong> = ขาด
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <strong className="text-amber-600 font-bold text-xs">ส</strong> = สาย
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <strong className="text-sky-600 font-bold text-xs">ป</strong> = ป่วย
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <strong className="text-orange-600 font-bold text-xs">ก</strong> = กิจ
-            </span>
+          {/* Legend Guide Bar */}
+          <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-700 mb-2.5 px-3 py-1 bg-slate-50 border border-slate-300 rounded-xl print:border-none print:bg-transparent print:px-0">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-medium">
+              <span className="font-bold text-slate-800">คำอธิบายสัญลักษณ์:</span>
+              <span className="inline-flex items-center gap-1">
+                <strong className="text-emerald-700 font-extrabold text-xs">✓</strong> = มาเรียน
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <strong className="text-red-600 font-bold text-xs">ข</strong> = ขาด
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <strong className="text-amber-600 font-bold text-xs">ส</strong> = สาย
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <strong className="text-sky-600 font-bold text-xs">ป</strong> = ป่วย
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <strong className="text-orange-600 font-bold text-xs">ก</strong> = กิจ
+              </span>
+            </div>
+            <div className="text-[10px] text-slate-500 font-medium">
+              แสดงเฉพาะวันที่มีสอนในเดือนนี้ ({teachingDates.length} วัน)
+            </div>
           </div>
-          <div className="text-[10px] text-slate-500 font-medium">
-            แสดงเฉพาะวันที่มีสอนในเดือนนี้ ({teachingDates.length} วัน)
-          </div>
-        </div>
 
-        {/* Attendance Matrix Table */}
-        <div className="overflow-x-auto w-full">
-          <table className="w-full text-center border-collapse border border-slate-600 text-xs text-slate-900 print:text-[9px] print:w-full">
-            <thead>
-              {/* Top Header Row */}
-              <tr className="bg-slate-100 text-slate-900 font-bold">
-                <th className="py-1.5 px-1 border border-slate-600 w-10 shrink-0 text-center print:w-7 print:px-0.5 print:py-1" rowSpan={2}>
-                  ลำดับ
-                </th>
-                <th className="py-1.5 px-3 border border-slate-600 min-w-[160px] text-left print:min-w-0 print:px-1.5 print:py-1 print:text-[9.5px]" rowSpan={2}>
-                  ชื่อนักเรียน
-                </th>
-
-                {/* Date Columns Header (วันที่: 1, 2, 3... แสดงเฉพาะวันที่มีสอน) */}
-                {teachingDates.length === 0 ? (
-                  <th className="py-2 px-4 border border-slate-600 text-center text-slate-500 font-normal">
-                    ไม่มีคาบสอนในเดือน {selectedMonthLabel}
+          {/* Attendance Matrix Table */}
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-center border-collapse border border-slate-600 text-xs text-slate-900 print:text-[9px] print:w-full">
+              <thead>
+                {/* Top Header Row */}
+                <tr className="bg-slate-100 text-slate-900 font-bold">
+                  <th className="py-1.5 px-1 border border-slate-600 w-10 shrink-0 text-center print:w-7 print:px-0.5 print:py-1" rowSpan={2}>
+                    ลำดับ
                   </th>
-                ) : (
-                  <th
-                    className="py-1 px-1 border border-slate-600 text-center font-bold print:py-0.5 print:text-[9px]"
-                    colSpan={teachingDates.length}
-                  >
-                    วันที่ (เฉพาะวันที่มีสอนในเดือน {selectedMonthLabel})
+                  <th className="py-1.5 px-3 border border-slate-600 min-w-[160px] text-left print:min-w-0 print:px-1.5 print:py-1 print:text-[9.5px]" rowSpan={2}>
+                    ชื่อนักเรียน
                   </th>
-                )}
 
-                {/* Summary Columns Header */}
-                <th className="py-1 px-1 border border-slate-600 text-center font-bold print:py-0.5 print:text-[9px]" colSpan={6}>
-                  สรุป (วัน)
-                </th>
-              </tr>
-
-              {/* Second Header Row: Specific Day Numbers (1, 2, 3...) & Summary Subheaders */}
-              <tr className="bg-slate-50 text-[11px] print:text-[8.5px] font-bold">
-                {teachingDates.map((dateStr) => {
-                  const dayNum = parseInt(dateStr.split('-')[2], 10);
-                  const dayOfWeek = getDayOfWeekFromDate(dateStr);
-                  const shortDay = dayOfWeek ? dayOfWeek.slice(0, 2) : '';
-
-                  return (
-                    <th
-                      key={dateStr}
-                      className="py-1 px-0.5 border border-slate-600 min-w-[26px] max-w-[32px] text-center print:min-w-0 print:w-auto print:px-0.5 print:py-0.5"
-                      title={formatToThaiBE(dateStr)}
-                    >
-                      <div className="text-xs print:text-[9px] font-bold leading-tight">{dayNum}</div>
-                      <div className="text-[9px] print:text-[7.5px] text-slate-500 font-normal leading-tight">
-                        {shortDay}
-                      </div>
+                  {/* Date Columns Header */}
+                  {teachingDates.length === 0 ? (
+                    <th className="py-2 px-4 border border-slate-600 text-center text-slate-500 font-normal">
+                      ไม่มีคาบสอนในเดือน {selectedMonthLabel}
                     </th>
-                  );
-                })}
-
-                {/* Summary Subheaders: มา, ขาด, สาย, ป่วย, กิจ, ร้อยละ */}
-                <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-emerald-800 text-[10px] print:text-[8px]">มา</th>
-                <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-red-700 text-[10px] print:text-[8px]">ขาด</th>
-                <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-amber-700 text-[10px] print:text-[8px]">สาย</th>
-                <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-sky-700 text-[10px] print:text-[8px]">ป่วย</th>
-                <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-orange-700 text-[10px] print:text-[8px]">กิจ</th>
-                <th className="py-1 px-1 border border-slate-600 w-10 print:w-7 print:px-0.5 text-slate-900 text-[10px] print:text-[8px]">%</th>
-              </tr>
-            </thead>
-
-            {/* Table Body: Student Rows */}
-            <tbody className="divide-y divide-slate-400 text-xs print:text-[9px]">
-              {classStudents.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={teachingDates.length + 8}
-                    className="py-8 text-center text-slate-400 border border-slate-400"
-                  >
-                    ยังไม่มีรายชื่อนักเรียนในห้อง {currentClass?.name || ''}
-                  </td>
-                </tr>
-              ) : (
-                classStudents.map((std, idx) => {
-                  const stats = studentStats[idx];
-
-                  return (
-                    <tr
-                      key={std.id || idx}
-                      className="hover:bg-teal-50/20 print:hover:bg-transparent transition-colors"
+                  ) : (
+                    <th
+                      className="py-1 px-1 border border-slate-600 text-center font-bold print:py-0.5 print:text-[9px]"
+                      colSpan={teachingDates.length}
                     >
-                      {/* 1. ลำดับ */}
-                      <td className="py-1 px-1 border border-slate-600 text-center font-semibold text-slate-700 print:py-0.5 print:px-0.5 print:text-[9px]">
-                        {std.seq || idx + 1}
-                      </td>
+                      วันที่ (เฉพาะวันที่มีสอนในเดือน {selectedMonthLabel})
+                    </th>
+                  )}
 
-                      {/* 2. ชื่อนักเรียน */}
-                      <td className="py-1 px-2.5 border border-slate-600 text-left font-medium text-slate-900 whitespace-nowrap print:py-0.5 print:px-1.5 print:text-[9.5px]">
-                        {std.name}
-                      </td>
-
-                      {/* 3. วันที่ (แต่ละวันที่มีสอน: 1, 2, 3...) */}
-                      {teachingDates.length === 0 ? (
-                        <td className="py-1 px-2 border border-slate-600 text-slate-400">-</td>
-                      ) : (
-                        teachingDates.map((dateStr) => {
-                          const dateMap = attendanceMatrix.get(dateStr);
-                          const status = dateMap?.get(std.id) || dateMap?.get(std.name);
-
-                          return (
-                            <td
-                              key={dateStr}
-                              onClick={() => {
-                                setActiveCellEdit({
-                                  dateStr,
-                                  studentId: std.id,
-                                  studentName: std.name,
-                                  currentStatus: status
-                                });
-                              }}
-                              className="py-1 px-0.5 border border-slate-600 text-center font-bold cursor-pointer hover:bg-teal-100/50 print:cursor-default print:hover:bg-transparent transition-colors select-none print:py-0.5 print:px-0 print:text-[9px]"
-                              title={`คลิกเพื่อเช็คชื่อ: ${std.name} (${formatToThaiBE(dateStr)})`}
-                            >
-                              {renderStatusSymbol(status)}
-                            </td>
-                          );
-                        })
-                      )}
-
-                      {/* Student Individual Summary Totals */}
-                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-emerald-800 bg-emerald-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
-                        {stats?.present || 0}
-                      </td>
-                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-red-700 bg-red-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
-                        {stats?.absent || 0}
-                      </td>
-                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-amber-700 bg-amber-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
-                        {stats?.late || 0}
-                      </td>
-                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-sky-700 bg-sky-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
-                        {stats?.sick || 0}
-                      </td>
-                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-orange-700 bg-orange-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
-                        {stats?.leave || 0}
-                      </td>
-                      <td className="py-1 px-1 border border-slate-600 text-center font-bold text-slate-900 print:py-0.5 print:px-0.5 print:text-[8.5px]">
-                        {stats?.rate}%
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-
-            {/* Table Footer: Daily Summary Counts */}
-            {classStudents.length > 0 && teachingDates.length > 0 && (
-              <tfoot>
-                {/* รวมมาเรียน */}
-                <tr className="bg-emerald-50/70 font-bold text-[11px] print:text-[8.5px] text-emerald-900 border-t-2 border-slate-600">
-                  <td colSpan={2} className="py-1 px-2 border border-slate-600 text-right print:py-0.5 print:px-1">
-                    รวมมาเรียน (คน):
-                  </td>
-                  {teachingDates.map((dateStr) => (
-                    <td key={dateStr} className="py-1 px-0.5 border border-slate-600 text-center font-bold print:py-0.5 print:px-0">
-                      {dateTotals[dateStr]?.present || 0}
-                    </td>
-                  ))}
-                  <td colSpan={6} className="py-1 px-2 border border-slate-600 text-center print:py-0.5 print:px-0.5">
-                    {studentStats.reduce((sum, s) => sum + s.present, 0)} ครั้ง
-                  </td>
+                  {/* Summary Columns Header */}
+                  <th className="py-1 px-1 border border-slate-600 text-center font-bold print:py-0.5 print:text-[9px]" colSpan={6}>
+                    สรุป (วัน)
+                  </th>
                 </tr>
 
-                {/* รวมขาดเรียน */}
-                <tr className="bg-red-50/70 font-bold text-[11px] print:text-[8.5px] text-red-900">
-                  <td colSpan={2} className="py-1 px-2 border border-slate-600 text-right print:py-0.5 print:px-1">
-                    รวมขาดเรียน (คน):
-                  </td>
-                  {teachingDates.map((dateStr) => (
-                    <td key={dateStr} className="py-1 px-0.5 border border-slate-600 text-center font-bold print:py-0.5 print:px-0">
-                      {dateTotals[dateStr]?.absent || 0}
-                    </td>
-                  ))}
-                  <td colSpan={6} className="py-1 px-2 border border-slate-600 text-center print:py-0.5 print:px-0.5">
-                    {studentStats.reduce((sum, s) => sum + s.absent, 0)} ครั้ง
-                  </td>
-                </tr>
-
-                {/* รวมสาย, ป่วย, กิจ */}
-                <tr className="bg-slate-100 font-bold text-[11px] print:text-[8.5px] text-slate-800">
-                  <td colSpan={2} className="py-1 px-2 border border-slate-600 text-right print:py-0.5 print:px-1">
-                    รวมสาย/ป่วย/กิจ (คน):
-                  </td>
+                {/* Second Header Row */}
+                <tr className="bg-slate-50 text-[11px] print:text-[8.5px] font-bold">
                   {teachingDates.map((dateStr) => {
-                    const dt = dateTotals[dateStr];
-                    const otherCount = (dt?.late || 0) + (dt?.sick || 0) + (dt?.leave || 0);
+                    const dayNum = parseInt(dateStr.split('-')[2], 10);
+                    const dayOfWeek = getDayOfWeekFromDate(dateStr);
+                    const shortDay = dayOfWeek ? dayOfWeek.slice(0, 2) : '';
+
                     return (
-                      <td key={dateStr} className="py-1 px-0.5 border border-slate-600 text-center font-bold print:py-0.5 print:px-0">
-                        {otherCount}
-                      </td>
+                      <th
+                        key={dateStr}
+                        className="py-1 px-0.5 border border-slate-600 min-w-[26px] max-w-[32px] text-center print:min-w-0 print:w-auto print:px-0.5 print:py-0.5"
+                        title={formatToThaiBE(dateStr)}
+                      >
+                        <div className="text-xs print:text-[9px] font-bold leading-tight">{dayNum}</div>
+                        <div className="text-[9px] print:text-[7.5px] text-slate-500 font-normal leading-tight">
+                          {shortDay}
+                        </div>
+                      </th>
                     );
                   })}
-                  <td colSpan={6} className="py-1 px-2 border border-slate-600 text-center print:py-0.5 print:px-0.5">
-                    {studentStats.reduce((sum, s) => sum + s.late + s.sick + s.leave, 0)} ครั้ง
-                  </td>
+
+                  {/* Summary Subheaders: มา, ขาด, สาย, ป่วย, กิจ, ร้อยละ */}
+                  <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-emerald-800 text-[10px] print:text-[8px]">มา</th>
+                  <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-red-700 text-[10px] print:text-[8px]">ขาด</th>
+                  <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-amber-700 text-[10px] print:text-[8px]">สาย</th>
+                  <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-sky-700 text-[10px] print:text-[8px]">ป่วย</th>
+                  <th className="py-1 px-1 border border-slate-600 w-8 print:w-6 print:px-0.5 text-orange-700 text-[10px] print:text-[8px]">กิจ</th>
+                  <th className="py-1 px-1 border border-slate-600 w-10 print:w-7 print:px-0.5 text-slate-900 text-[10px] print:text-[8px]">%</th>
                 </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
+              </thead>
 
-        {/* Official Signature Block (Formatted for A4 Portrait Document) */}
-        <div className="grid grid-cols-2 gap-8 pt-8 text-center text-xs text-slate-800 print:pt-6 print:gap-4 print:break-inside-avoid">
-          <div className="space-y-6">
-            <p className="leading-relaxed">
-              ลงชื่อ..................................................................ครูผู้สอน
-            </p>
-            <p className="font-semibold">({teacherFullName})</p>
-            <p className="text-[11px] text-slate-500">
-              วันที่.........เดือน..................................พ.ศ. {activeYear?.name || '2569'}
-            </p>
+              {/* Table Body: Student Rows */}
+              <tbody className="divide-y divide-slate-400 text-xs print:text-[9px]">
+                {classStudents.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={teachingDates.length + 8}
+                      className="py-8 text-center text-slate-400 border border-slate-400"
+                    >
+                      ยังไม่มีรายชื่อนักเรียนในห้อง {currentClass?.name || ''}
+                    </td>
+                  </tr>
+                ) : (
+                  classStudents.map((std, idx) => {
+                    const stats = studentStats[idx];
+
+                    return (
+                      <tr
+                        key={std.id || idx}
+                        className="hover:bg-teal-50/20 print:hover:bg-transparent transition-colors group"
+                      >
+                        {/* 1. ลำดับ */}
+                        <td className="py-1 px-1 border border-slate-600 text-center font-semibold text-slate-700 print:py-0.5 print:px-0.5 print:text-[9px]">
+                          {std.seq || idx + 1}
+                        </td>
+
+                        {/* 2. ชื่อนักเรียน with Quick Individual Report Button */}
+                        <td className="py-1 px-2.5 border border-slate-600 text-left font-medium text-slate-900 whitespace-nowrap print:py-0.5 print:px-1.5 print:text-[9.5px]">
+                          <div className="flex items-center justify-between gap-1">
+                            <span>{std.name}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedStudentId(std.id);
+                                setReportMode('individual');
+                              }}
+                              title="ดูและ Export PDF รายงานรายบุคคลของนักเรียนคนนี้"
+                              className="no-print opacity-0 group-hover:opacity-100 p-1 rounded-md text-[#0C7C82] hover:bg-[#0C7C82]/10 transition-opacity cursor-pointer"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* 3. วันที่ (แต่ละวันที่มีสอน) */}
+                        {teachingDates.length === 0 ? (
+                          <td className="py-1 px-2 border border-slate-600 text-slate-400">-</td>
+                        ) : (
+                          teachingDates.map((dateStr) => {
+                            const dateMap = attendanceMatrix.get(dateStr);
+                            const status = dateMap?.get(std.id) || dateMap?.get(std.name);
+
+                            return (
+                              <td
+                                key={dateStr}
+                                onClick={() => {
+                                  setActiveCellEdit({
+                                    dateStr,
+                                    studentId: std.id,
+                                    studentName: std.name,
+                                    currentStatus: status
+                                  });
+                                }}
+                                className="py-1 px-0.5 border border-slate-600 text-center font-bold cursor-pointer hover:bg-teal-100/50 print:cursor-default print:hover:bg-transparent transition-colors select-none print:py-0.5 print:px-0 print:text-[9px]"
+                                title={`คลิกเพื่อเช็คชื่อ: ${std.name} (${formatToThaiBE(dateStr)})`}
+                              >
+                                {renderStatusSymbol(status)}
+                              </td>
+                            );
+                          })
+                        )}
+
+                        {/* Student Individual Summary Totals */}
+                        <td className="py-1 px-1 border border-slate-600 text-center font-bold text-emerald-800 bg-emerald-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
+                          {stats?.present || 0}
+                        </td>
+                        <td className="py-1 px-1 border border-slate-600 text-center font-bold text-red-700 bg-red-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
+                          {stats?.absent || 0}
+                        </td>
+                        <td className="py-1 px-1 border border-slate-600 text-center font-bold text-amber-700 bg-amber-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
+                          {stats?.late || 0}
+                        </td>
+                        <td className="py-1 px-1 border border-slate-600 text-center font-bold text-sky-700 bg-sky-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
+                          {stats?.sick || 0}
+                        </td>
+                        <td className="py-1 px-1 border border-slate-600 text-center font-bold text-orange-700 bg-orange-50/30 print:bg-transparent print:py-0.5 print:px-0.5 print:text-[8.5px]">
+                          {stats?.leave || 0}
+                        </td>
+                        <td className="py-1 px-1 border border-slate-600 text-center font-bold text-slate-900 print:py-0.5 print:px-0.5 print:text-[8.5px]">
+                          {stats?.rate}%
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+
+              {/* Table Footer: Daily Summary Counts */}
+              {classStudents.length > 0 && teachingDates.length > 0 && (
+                <tfoot>
+                  {/* รวมมาเรียน */}
+                  <tr className="bg-emerald-50/70 font-bold text-[11px] print:text-[8.5px] text-emerald-900 border-t-2 border-slate-600">
+                    <td colSpan={2} className="py-1 px-2 border border-slate-600 text-right print:py-0.5 print:px-1">
+                      รวมมาเรียน (คน):
+                    </td>
+                    {teachingDates.map((dateStr) => (
+                      <td key={dateStr} className="py-1 px-0.5 border border-slate-600 text-center font-bold print:py-0.5 print:px-0">
+                        {dateTotals[dateStr]?.present || 0}
+                      </td>
+                    ))}
+                    <td colSpan={6} className="py-1 px-2 border border-slate-600 text-center print:py-0.5 print:px-0.5">
+                      {studentStats.reduce((sum, s) => sum + s.present, 0)} ครั้ง
+                    </td>
+                  </tr>
+
+                  {/* รวมขาดเรียน */}
+                  <tr className="bg-red-50/70 font-bold text-[11px] print:text-[8.5px] text-red-900">
+                    <td colSpan={2} className="py-1 px-2 border border-slate-600 text-right print:py-0.5 print:px-1">
+                      รวมขาดเรียน (คน):
+                    </td>
+                    {teachingDates.map((dateStr) => (
+                      <td key={dateStr} className="py-1 px-0.5 border border-slate-600 text-center font-bold print:py-0.5 print:px-0">
+                        {dateTotals[dateStr]?.absent || 0}
+                      </td>
+                    ))}
+                    <td colSpan={6} className="py-1 px-2 border border-slate-600 text-center print:py-0.5 print:px-0.5">
+                      {studentStats.reduce((sum, s) => sum + s.absent, 0)} ครั้ง
+                    </td>
+                  </tr>
+
+                  {/* รวมสาย, ป่วย, กิจ */}
+                  <tr className="bg-slate-100 font-bold text-[11px] print:text-[8.5px] text-slate-800">
+                    <td colSpan={2} className="py-1 px-2 border border-slate-600 text-right print:py-0.5 print:px-1">
+                      รวมสาย/ป่วย/กิจ (คน):
+                    </td>
+                    {teachingDates.map((dateStr) => {
+                      const dt = dateTotals[dateStr];
+                      const otherCount = (dt?.late || 0) + (dt?.sick || 0) + (dt?.leave || 0);
+                      return (
+                        <td key={dateStr} className="py-1 px-0.5 border border-slate-600 text-center font-bold print:py-0.5 print:px-0">
+                          {otherCount}
+                        </td>
+                      );
+                    })}
+                    <td colSpan={6} className="py-1 px-2 border border-slate-600 text-center print:py-0.5 print:px-0.5">
+                      {studentStats.reduce((sum, s) => sum + s.late + s.sick + s.leave, 0)} ครั้ง
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
           </div>
 
-          <div className="space-y-6">
-            <p className="leading-relaxed">
-              ลงชื่อ..................................................................ผู้บริหาร/ผู้ตรวจ
-            </p>
-            <p className="font-semibold">(..................................................................)</p>
-            <p className="text-[11px] text-slate-500">
-              วันที่.........เดือน..................................พ.ศ. {activeYear?.name || '2569'}
-            </p>
+          {/* Official Signature Block */}
+          <div className="grid grid-cols-2 gap-8 pt-8 text-center text-xs text-slate-800 print:pt-6 print:gap-4 print:break-inside-avoid">
+            <div className="space-y-6">
+              <p className="leading-relaxed">
+                ลงชื่อ..................................................................ครูผู้สอน
+              </p>
+              <p className="font-semibold">({teacherFullName})</p>
+              <p className="text-[11px] text-slate-500">
+                วันที่.........เดือน..................................พ.ศ. {activeYear?.name || '2569'}
+              </p>
+            </div>
+
+            <div className="space-y-6">
+              <p className="leading-relaxed">
+                ลงชื่อ..................................................................ผู้บริหาร/ผู้ตรวจ
+              </p>
+              <p className="font-semibold">(..................................................................)</p>
+              <p className="text-[11px] text-slate-500">
+                วันที่.........เดือน..................................พ.ศ. {activeYear?.name || '2569'}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* VIEW 2: นักเรียนรายบุคคล (INDIVIDUAL STUDENT SLIP / BATCH ALL) */}
+      {reportMode === 'individual' && (
+        <div className="space-y-6">
+          {classStudents.length === 0 ? (
+            <div className="bg-white rounded-3xl p-10 text-center text-slate-400 border border-slate-200">
+              ยังไม่มีรายชื่อนักเรียนในห้อง {currentClass?.name || ''}
+            </div>
+          ) : individualScope === 'all' ? (
+            /* Batch print all students in class, 1 page per student */
+            <div className="space-y-6 print:space-y-0">
+              {classStudents.map((std, idx) => renderIndividualSlip(std, idx))}
+            </div>
+          ) : (
+            /* Single selected student */
+            currentStudent &&
+            renderIndividualSlip(
+              currentStudent,
+              classStudents.findIndex((s) => s.id === currentStudent.id)
+            )
+          )}
+        </div>
+      )}
 
       {/* Interactive Quick Status Selector Modal (When teacher clicks a date cell on screen) */}
       {activeCellEdit && (

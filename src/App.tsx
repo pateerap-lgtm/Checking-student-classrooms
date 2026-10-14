@@ -97,6 +97,10 @@ export default function App() {
   const [assignments, setAssignments] = useState<TeachingAssignment[]>(DEFAULT_ASSIGNMENTS);
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
 
+  // Teacher navigation state
+  const [pendingAttendanceAssignment, setPendingAttendanceAssignment] = useState<TeachingAssignment | null>(null);
+  const [pendingReportStudent, setPendingReportStudent] = useState<{ studentId: string; classId?: string } | null>(null);
+
   // Loading indicator
   const [isLoading, setIsLoading] = useState(true);
 
@@ -834,11 +838,21 @@ export default function App() {
                       teacherUsername={currentUser.username}
                       teacherFullName={currentUser.fullName}
                       assignments={assignments}
+                      periods={periods}
                       classes={classes}
                       subjects={subjects}
                       students={students}
                       attendanceLogs={attendanceLogs}
+                      activeYear={activeYear}
                       onNavigateTab={setCurrentTab}
+                      onSelectAssignmentForAttendance={(assignment) => {
+                        setPendingAttendanceAssignment(assignment);
+                        setCurrentTab('attendance');
+                      }}
+                      onSelectStudentForReport={(studentId, classId) => {
+                        setPendingReportStudent({ studentId, classId });
+                        setCurrentTab('report');
+                      }}
                     />
                   )}
                   {currentTab === 'attendance' && (
@@ -852,6 +866,8 @@ export default function App() {
                       students={students}
                       attendanceLogs={attendanceLogs}
                       activeYear={activeYear}
+                      pendingAssignment={pendingAttendanceAssignment}
+                      onClearPendingAssignment={() => setPendingAttendanceAssignment(null)}
                       onSaveAttendance={handleSaveAttendance}
                       onUpdateAttendance={handleUpdateAttendance}
                       onDeleteAttendance={handleDeleteAttendance}
@@ -870,6 +886,9 @@ export default function App() {
                       teacherUsername={currentUser.username}
                       teacherFullName={currentUser.fullName}
                       activeYear={activeYear}
+                      initialStudentId={pendingReportStudent?.studentId}
+                      initialClassId={pendingReportStudent?.classId}
+                      onClearInitialStudent={() => setPendingReportStudent(null)}
                       onUpdateAttendance={handleUpdateAttendance}
                       onSaveAttendance={handleSaveAttendance}
                     />
