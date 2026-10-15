@@ -1,6 +1,37 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { CalendarCheck, Plus, Edit2, Trash2, User, ChevronLeft, ChevronRight, X, Info, Clock } from 'lucide-react';
-import { TeachingAssignment, AppUser, Classroom, Subject, Period, DayOfWeek, AcademicYear } from '../../types';
+import {
+  CalendarCheck,
+  Plus,
+  Edit2,
+  Trash2,
+  User,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Info,
+  Clock,
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle2,
+  Calendar,
+  LayoutGrid,
+  ListFilter,
+  Layers,
+  Printer,
+  BookOpen,
+  GraduationCap,
+  Sparkles
+} from 'lucide-react';
+import {
+  TeachingAssignment,
+  AppUser,
+  Classroom,
+  Subject,
+  Period,
+  DayOfWeek,
+  AcademicYear,
+  SystemSettings
+} from '../../types';
 
 interface AssignmentsViewProps {
   assignments: TeachingAssignment[];
@@ -9,14 +40,62 @@ interface AssignmentsViewProps {
   subjects: Subject[];
   periods: Period[];
   activeYear?: AcademicYear;
+  systemSettings?: SystemSettings;
   onAddAssignment: (assignment: Omit<TeachingAssignment, 'id'>) => Promise<void>;
   onUpdateAssignment: (id: string, updated: Partial<TeachingAssignment>) => Promise<void>;
   onDeleteAssignment: (id: string) => Promise<void>;
+  onDeleteAllAssignments?: (targetIds?: string[]) => Promise<void>;
   openConfirm: (title: string, message: string, onConfirm: () => void, type?: 'danger' | 'warning') => void;
   showToast?: (type: 'success' | 'error' | 'warning', message: string) => void;
 }
 
 const DAYS: DayOfWeek[] = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์'];
+
+const DAY_CONFIG: Record<
+  DayOfWeek,
+  { label: string; bg: string; text: string; border: string; badge: string; accentColor: string }
+> = {
+  จันทร์: {
+    label: 'วันจันทร์',
+    bg: 'bg-amber-50/70',
+    text: 'text-amber-900',
+    border: 'border-amber-200',
+    badge: 'bg-amber-500 text-white',
+    accentColor: '#F59E0B'
+  },
+  อังคาร: {
+    label: 'วันอังคาร',
+    bg: 'bg-pink-50/70',
+    text: 'text-pink-900',
+    border: 'border-pink-200',
+    badge: 'bg-pink-500 text-white',
+    accentColor: '#EC4899'
+  },
+  พุธ: {
+    label: 'วันพุธ',
+    bg: 'bg-emerald-50/70',
+    text: 'text-emerald-900',
+    border: 'border-emerald-200',
+    badge: 'bg-emerald-600 text-white',
+    accentColor: '#10B981'
+  },
+  พฤหัสบดี: {
+    label: 'วันพฤหัสบดี',
+    bg: 'bg-orange-50/70',
+    text: 'text-orange-900',
+    border: 'border-orange-200',
+    badge: 'bg-orange-500 text-white',
+    accentColor: '#F97316'
+  },
+  ศุกร์: {
+    label: 'วันศุกร์',
+    bg: 'bg-sky-50/70',
+    text: 'text-sky-900',
+    border: 'border-sky-200',
+    badge: 'bg-sky-600 text-white',
+    accentColor: '#0284C7'
+  }
+};
 
 const PRESET_COLORS = [
   '#0C7C82', '#35B4B0', '#26A69A', '#AED581',
@@ -31,9 +110,11 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   subjects,
   periods,
   activeYear,
+  systemSettings,
   onAddAssignment,
   onUpdateAssignment,
   onDeleteAssignment,
+  onDeleteAllAssignments,
   openConfirm,
   showToast
 }) => {
@@ -47,6 +128,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   // Filter teacher
   const [filterTeacher, setFilterTeacher] = useState<string>('all');
 
+  // View mode when teacher filter is active: both | timetable | list
+  const [viewMode, setViewMode] = useState<'both' | 'timetable' | 'list'>('both');
+
   // Form states
   const [teacherUsername, setTeacherUsername] = useState(teachers[0]?.username || '');
   const [classId, setClassId] = useState(classes[0]?.id || '');
@@ -56,6 +140,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   const [dayOfWeek, setDayOfWeek] = useState<DayOfWeek>('จันทร์');
   const [color, setColor] = useState('#0C7C82');
   const [isSaving, setIsSaving] = useState(false);
+
+  // All periods sorted chronologically by order
+  const sortedPeriods = useMemo(() => [...periods].sort((a, b) => a.order - b.order), [periods]);
 
   // Available teaching periods (excluding lunch break)
   const teachingPeriods = useMemo(() => periods.filter((p) => !p.isLunchBreak), [periods]);
@@ -184,6 +271,121 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
     return endIdx - startIdx + 1;
   }, [teachingPeriods, periodId, endPeriodId]);
 
+  // Selected period index span in teachingPeriods
+  const selectedStartIdx = useMemo(() => {
+    return teachingPeriods.findIndex((p) => p.id === periodId);
+  }, [teachingPeriods, periodId]);
+
+  const selectedEndIdx = useMemo(() => {
+    if (totalSubjectPeriods <= 1) return selectedStartIdx;
+    const eIdx = teachingPeriods.findIndex((p) => p.id === endPeriodId);
+    return eIdx !== -1 && eIdx >= selectedStartIdx ? eIdx : selectedStartIdx;
+  }, [teachingPeriods, endPeriodId, selectedStartIdx, totalSubjectPeriods]);
+
+  // Helper to determine the period range an assignment spans in teachingPeriods
+  const getAssignmentPeriodRange = (a: TeachingAssignment) => {
+    const sIdx = teachingPeriods.findIndex((p) => p.id === a.periodId);
+    if (sIdx === -1) {
+      return { startIdx: -1, endIdx: -1, periodIds: [], periodNames: [] };
+    }
+    let eIdx = a.endPeriodId ? teachingPeriods.findIndex((p) => p.id === a.endPeriodId) : sIdx;
+    if (eIdx === -1 || eIdx < sIdx) {
+      const span = getAssignmentPeriodSpan(a);
+      eIdx = Math.min(teachingPeriods.length - 1, sIdx + span - 1);
+    }
+    const slice = teachingPeriods.slice(sIdx, eIdx + 1);
+    return {
+      startIdx: sIdx,
+      endIdx: eIdx,
+      periodIds: slice.map((p) => p.id),
+      periodNames: slice.map((p) => p.name)
+    };
+  };
+
+  // All existing assignments for this classroom on the selected day
+  const classroomDayAssignments = useMemo(() => {
+    if (!classId) return [];
+    return assignments.filter((a) => {
+      if (editingAssignment && a.id === editingAssignment.id) return false;
+      if (activeYear?.id && a.academicYearId && a.academicYearId !== activeYear.id) return false;
+      if (a.dayOfWeek !== dayOfWeek) return false;
+
+      const isSameClass =
+        (a.classId && a.classId === classId) ||
+        (selectedClass && (a.classId === selectedClass.id || a.className === selectedClass.name));
+
+      return isSameClass;
+    });
+  }, [assignments, editingAssignment, activeYear, dayOfWeek, classId, selectedClass]);
+
+  // Classroom period conflicts: another subject/teacher already assigned to these periods in this classroom
+  const classroomConflicts = useMemo(() => {
+    if (selectedStartIdx === -1) return [];
+    return classroomDayAssignments
+      .filter((a) => {
+        const aRange = getAssignmentPeriodRange(a);
+        if (aRange.startIdx === -1) return false;
+        return Math.max(selectedStartIdx, aRange.startIdx) <= Math.min(selectedEndIdx, aRange.endIdx);
+      })
+      .map((a) => {
+        const aRange = getAssignmentPeriodRange(a);
+        const overlapStart = Math.max(selectedStartIdx, aRange.startIdx);
+        const overlapEnd = Math.min(selectedEndIdx, aRange.endIdx);
+        const overlappingNames = teachingPeriods.slice(overlapStart, overlapEnd + 1).map((p) => p.name).join(', ');
+        return {
+          ...a,
+          overlappingNames
+        };
+      });
+  }, [classroomDayAssignments, selectedStartIdx, selectedEndIdx, teachingPeriods]);
+
+  // Teacher timetable conflicts: teacher is scheduled in another classroom during overlapping periods
+  const teacherDayAssignments = useMemo(() => {
+    if (!teacherUsername) return [];
+    return assignments.filter((a) => {
+      if (editingAssignment && a.id === editingAssignment.id) return false;
+      if (activeYear?.id && a.academicYearId && a.academicYearId !== activeYear.id) return false;
+      if (a.dayOfWeek !== dayOfWeek) return false;
+      if (a.teacherUsername !== teacherUsername) return false;
+      return true;
+    });
+  }, [assignments, editingAssignment, activeYear, dayOfWeek, teacherUsername]);
+
+  const teacherConflicts = useMemo(() => {
+    if (selectedStartIdx === -1) return [];
+    return teacherDayAssignments
+      .filter((a) => {
+        const isSameClass =
+          (a.classId && a.classId === classId) ||
+          (selectedClass && (a.classId === selectedClass.id || a.className === selectedClass.name));
+        if (isSameClass) return false; // Handled as classroom conflict
+
+        const aRange = getAssignmentPeriodRange(a);
+        if (aRange.startIdx === -1) return false;
+        return Math.max(selectedStartIdx, aRange.startIdx) <= Math.min(selectedEndIdx, aRange.endIdx);
+      })
+      .map((a) => {
+        const aRange = getAssignmentPeriodRange(a);
+        const overlapStart = Math.max(selectedStartIdx, aRange.startIdx);
+        const overlapEnd = Math.min(selectedEndIdx, aRange.endIdx);
+        const overlappingNames = teachingPeriods.slice(overlapStart, overlapEnd + 1).map((p) => p.name).join(', ');
+        return {
+          ...a,
+          overlappingNames
+        };
+      });
+  }, [teacherDayAssignments, selectedStartIdx, selectedEndIdx, teachingPeriods, classId, selectedClass]);
+
+  // Helper to check if a specific period in teachingPeriods is already occupied in this classroom on this day
+  const getPeriodAssignmentInClass = (pId: string) => {
+    const pIdx = teachingPeriods.findIndex((p) => p.id === pId);
+    if (pIdx === -1) return null;
+    return classroomDayAssignments.find((a) => {
+      const aRange = getAssignmentPeriodRange(a);
+      return aRange.startIdx !== -1 && pIdx >= aRange.startIdx && pIdx <= aRange.endIdx;
+    });
+  };
+
   // All subjects of the selected classroom
   const classSubjects = useMemo(() => {
     if (!classId) return [];
@@ -273,7 +475,11 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
     }
   }, [isModalOpen, availableClassSubjects, subjectId, teacherUsername]);
 
-  const openAddModal = () => {
+  const openAddModal = (
+    initialTeacherUsername?: string,
+    initialDay?: DayOfWeek,
+    initialPeriodId?: string
+  ) => {
     if (teachers.length === 0) {
       showToast?.('warning', 'กรุณาสร้างบัญชีครูผู้สอนก่อนมอบหมายการสอน');
       return;
@@ -291,7 +497,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
       return;
     }
 
-    const firstTeacherUsername = teachers[0]?.username || '';
+    const selectedTeacher =
+      initialTeacherUsername ||
+      (filterTeacher !== 'all' ? filterTeacher : (teachers[0]?.username || ''));
     const initialClass = classes[0];
     const initialClassId = initialClass.id;
     const initialClassSubs = subjects.filter(
@@ -302,21 +510,21 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
     // Subjects not fully assigned and not assigned to another teacher
     const availableSubs = initialClassSubs.filter((s) => {
       const assignedTeacher = getSubjectAssignedTeacher(s, null);
-      if (assignedTeacher && assignedTeacher.username !== firstTeacherUsername) return false;
+      if (assignedTeacher && assignedTeacher.username !== selectedTeacher) return false;
       return getSubjectRemainingPeriods(s, null) > 0;
     });
 
     const firstSub = availableSubs[0];
-    const firstPeriodId = teachingPeriods[0]?.id || '';
+    const targetPeriodId = initialPeriodId || (teachingPeriods[0]?.id || '');
     const rem = firstSub ? getSubjectRemainingPeriods(firstSub, null) : 1;
 
     setEditingAssignment(null);
-    setTeacherUsername(firstTeacherUsername);
+    setTeacherUsername(selectedTeacher);
     setClassId(initialClassId);
     setSubjectId(firstSub?.id || '');
-    setPeriodId(firstPeriodId);
-    setEndPeriodId(calculateEndPeriod(firstPeriodId, rem));
-    setDayOfWeek('จันทร์');
+    setPeriodId(targetPeriodId);
+    setEndPeriodId(calculateEndPeriod(targetPeriodId, rem));
+    setDayOfWeek(initialDay || 'จันทร์');
     setColor('#0C7C82');
     setIsModalOpen(true);
   };
@@ -369,6 +577,26 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
 
     if (!teacher || !cls || !sub || !startPer || !endPer) {
       showToast?.('warning', 'ข้อมูลไม่ครบถ้วน กรุณาตรวจสอบรายวิชาและชั้นเรียน');
+      return;
+    }
+
+    // Safety check 0: Duplicate period in classroom check
+    if (classroomConflicts.length > 0) {
+      const first = classroomConflicts[0];
+      showToast?.(
+        'error',
+        `ไม่สามารถบันทึกได้! คาบเรียนซ้ำซ้อนกับวิชา "${first.subjectCode} ${first.subjectName}" (ครู${first.teacherName}) ในห้อง ${selectedClass?.name || cls.name} วัน${dayOfWeek}`
+      );
+      return;
+    }
+
+    // Safety check 0.5: Teacher timetable conflict check
+    if (teacherConflicts.length > 0) {
+      const first = teacherConflicts[0];
+      showToast?.(
+        'error',
+        `ไม่สามารถบันทึกได้! ครู "${teacher.fullName}" ติดตารางสอนวิชา "${first.subjectCode}" ที่ห้อง ${first.className} ในช่วงเวลาดังกล่าวแล้ว`
+      );
       return;
     }
 
@@ -458,11 +686,67 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
     );
   };
 
+  const handleDeleteAll = () => {
+    if (assignments.length === 0) {
+      showToast?.('warning', 'ไม่มีข้อมูลการมอบหมายสอนให้ลบ');
+      return;
+    }
+
+    if (filterTeacher !== 'all') {
+      const teacherObj = teachers.find((t) => t.username === filterTeacher);
+      const teacherName = teacherObj?.fullName || filterTeacher;
+      openConfirm(
+        'ยืนยันการลบการมอบหมายสอนของครูท่านนี้',
+        `คุณต้องการลบข้อมูลการมอบหมายสอนของ "${teacherName}" ทั้งหมด ${filteredAssignments.length} รายการ ใช่หรือไม่? (หากต้องการลบทั้งหมดทุกครูในระบบ ให้เปลี่ยนตัวกรองเป็น "ครูผู้สอนทุกคน")`,
+        () => {
+          onDeleteAllAssignments?.(filteredAssignments.map((a) => a.id));
+        },
+        'danger'
+      );
+    } else {
+      openConfirm(
+        'ยืนยันการลบการมอบหมายสอนทั้งหมด',
+        `คำเตือน: คุณต้องการลบข้อมูลการมอบหมายชั้นเรียนที่สอนทั้งหมดในระบบจำนวน ${assignments.length} รายการ ใช่หรือไม่? ข้อมูลตารางสอนและการมอบหมายครูผู้สอนทั้งหมดจะถูกลบออกจากฐานข้อมูล และไม่สามารถย้อนกลับได้`,
+        () => {
+          onDeleteAllAssignments?.();
+        },
+        'danger'
+      );
+    }
+  };
+
   // Filtered assignments
-  const filteredAssignments = assignments.filter((a) => {
-    if (filterTeacher === 'all') return true;
-    return a.teacherUsername === filterTeacher;
-  });
+  const filteredAssignments = useMemo(() => {
+    return assignments.filter((a) => {
+      if (filterTeacher === 'all') return true;
+      return a.teacherUsername === filterTeacher;
+    });
+  }, [assignments, filterTeacher]);
+
+  const selectedTeacherObj = useMemo(() => {
+    if (filterTeacher === 'all') return null;
+    return teachers.find((t) => t.username === filterTeacher) || null;
+  }, [teachers, filterTeacher]);
+
+  const teacherTotalPeriods = useMemo(() => {
+    if (!selectedTeacherObj) return 0;
+    return filteredAssignments.reduce((acc, a) => acc + getAssignmentPeriodSpan(a), 0);
+  }, [selectedTeacherObj, filteredAssignments, teachingPeriods]);
+
+  const teacherClassesCount = useMemo(() => {
+    if (!selectedTeacherObj) return 0;
+    return new Set(filteredAssignments.map((a) => a.classId || a.className)).size;
+  }, [selectedTeacherObj, filteredAssignments]);
+
+  const teacherSubjectsCount = useMemo(() => {
+    if (!selectedTeacherObj) return 0;
+    return new Set(filteredAssignments.map((a) => a.subjectId || a.subjectCode)).size;
+  }, [selectedTeacherObj, filteredAssignments]);
+
+  // Handle printing timetable
+  const handlePrintTimetable = () => {
+    window.print();
+  };
 
   // Pagination calculation: max 10 records per page
   const totalPages = Math.ceil(filteredAssignments.length / itemsPerPage) || 1;
@@ -473,7 +757,36 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
 
   return (
     <div className="space-y-6">
-      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-4">
+      {/* Print CSS styles for clean A4 printing */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #teacher-timetable-print-area, #teacher-timetable-print-area * {
+            visibility: visible;
+          }
+          #teacher-timetable-print-area {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: auto;
+            margin: 0;
+            padding: 12px;
+            border: none !important;
+            box-shadow: none !important;
+            background: white !important;
+            z-index: 99999;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+
+      {/* Top Filter and Controls Card */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-4 no-print">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -493,7 +806,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                 setFilterTeacher(e.target.value);
                 setCurrentPage(1);
               }}
-              className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-white"
+              className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 bg-white shadow-2xs focus:ring-2 focus:ring-[#0C7C82]"
             >
               <option value="all">ครูผู้สอนทุกคน ({assignments.length} คาบ)</option>
               {teachers.map((t) => (
@@ -505,24 +818,398 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
           </div>
         </div>
 
-        {/* Action Button */}
-        <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-          <span className="text-xs text-slate-500">
-            แสดง {paginatedAssignments.length} จากทั้งหมด {filteredAssignments.length} รายการ (จำกัด 10 รายการต่อหน้า)
-          </span>
+        {/* Action Button & View Controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-slate-500">
+              แสดง {paginatedAssignments.length} จากทั้งหมด {filteredAssignments.length} รายการ
+            </span>
 
-          <button
-            onClick={openAddModal}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-medium bg-gradient-to-r from-[#0C7C82] to-[#35B4B0] hover:from-[#096368] hover:to-[#2ba09c] shadow-md shadow-[#0C7C82]/20 cursor-pointer text-xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>มอบหมายการสอน</span>
-          </button>
+            {/* View Mode Switcher when filtered by teacher */}
+            {selectedTeacherObj && (
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('both')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    viewMode === 'both'
+                      ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="แสดงทั้งตารางสอนและรายการตารางข้อมูล"
+                >
+                  <Layers className="w-3.5 h-3.5 text-[#0C7C82]" />
+                  <span>ทั้งสองแบบ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('timetable')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    viewMode === 'timetable'
+                      ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="แสดงเฉพาะตารางสอน"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-[#0C7C82]" />
+                  <span>ตารางสอน</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    viewMode === 'list'
+                      ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="แสดงเฉพาะรายการข้อมูล"
+                >
+                  <ListFilter className="w-3.5 h-3.5 text-[#0C7C82]" />
+                  <span>รายการ</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {selectedTeacherObj && (
+              <button
+                type="button"
+                onClick={handlePrintTimetable}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors shadow-2xs cursor-pointer"
+                title="พิมพ์ตารางสอนประจำสัปดาห์ของครูท่านนี้"
+              >
+                <Printer className="w-4 h-4 text-slate-600" />
+                <span className="hidden sm:inline">พิมพ์ตารางสอน</span>
+              </button>
+            )}
+
+            {assignments.length > 0 && (
+              <button
+                type="button"
+                onClick={handleDeleteAll}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-rose-700 font-medium bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer text-xs shadow-2xs"
+                title={filterTeacher !== 'all' ? 'ลบข้อมูลการมอบหมายสอนของครูท่านนี้ทั้งหมด' : 'ลบข้อมูลการมอบหมายสอนทั้งหมด'}
+              >
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <span>ลบทั้งหมด</span>
+                {filterTeacher !== 'all' ? (
+                  <span className="text-[10px] bg-rose-200/80 text-rose-800 px-1.5 py-0.5 rounded-md font-semibold">
+                    ครูนี้ ({filteredAssignments.length})
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-rose-200/80 text-rose-800 px-1.5 py-0.5 rounded-md font-semibold">
+                    ({assignments.length})
+                  </span>
+                )}
+              </button>
+            )}
+
+            <button
+              onClick={() => openAddModal(filterTeacher !== 'all' ? filterTeacher : undefined)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-medium bg-gradient-to-r from-[#0C7C82] to-[#35B4B0] hover:from-[#096368] hover:to-[#2ba09c] shadow-md shadow-[#0C7C82]/20 cursor-pointer text-xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>มอบหมายการสอน</span>
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* FEATURE: เมื่อกรองตามครูผู้สอน ให้แสดงเป็นตารางสอนด้วย (Weekly Timetable Grid) */}
+      {selectedTeacherObj && (viewMode === 'timetable' || viewMode === 'both') && (
+        <div
+          id="teacher-timetable-print-area"
+          className="bg-white rounded-3xl border border-slate-100 shadow-xs p-6 space-y-4"
+        >
+          {/* Print Only Header (Visible exclusively when printing) */}
+          <div className="hidden print:block text-center border-b border-slate-300 pb-3 mb-2">
+            <h1 className="text-xl font-bold text-slate-900">
+              {systemSettings?.schoolName || 'ระบบบริหารจัดการสถานศึกษา'}
+            </h1>
+            <h2 className="text-base font-semibold text-slate-800 mt-0.5">
+              ตารางสอนประจำสัปดาห์ (Teaching Timetable)
+            </h2>
+            <p className="text-xs text-slate-600 mt-1">
+              ครูผู้สอน: <strong>{selectedTeacherObj.fullName}</strong> • ภาคเรียน/ปีการศึกษา: <strong>{activeYear?.name || '2569'}</strong> • รวม {teacherTotalPeriods} คาบ/สัปดาห์
+            </p>
+          </div>
+
+          {/* Timetable Card Header on Screen */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4 no-print">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#0C7C82] to-[#35B4B0] text-white flex items-center justify-center shadow-md shadow-[#0C7C82]/20 shrink-0">
+                <Calendar className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-50 text-[#0C7C82] border border-teal-200">
+                    ตารางสอนรายสัปดาห์ (Weekly Timetable)
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    ปีการศึกษา {activeYear?.name || '2569'}
+                  </span>
+                </div>
+                <h3 className="text-lg font-bold text-slate-800 mt-0.5 flex items-center gap-2">
+                  <span>คุณครู{selectedTeacherObj.fullName}</span>
+                  <span className="text-xs font-normal text-slate-500 font-mono">
+                    (@{selectedTeacherObj.username})
+                  </span>
+                </h3>
+              </div>
+            </div>
+
+            {/* Teaching Stats summary */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-2xl border border-slate-200/80 text-xs text-slate-700">
+                <span className="flex items-center gap-1.5 font-bold text-[#0C7C82]">
+                  <Clock className="w-4 h-4 text-[#0C7C82]" />
+                  <span>รวม <strong>{teacherTotalPeriods}</strong> คาบ/สัปดาห์</span>
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="flex items-center gap-1 font-medium">
+                  <GraduationCap className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{teacherClassesCount} ชั้นเรียน</span>
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="flex items-center gap-1 font-medium">
+                  <BookOpen className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{teacherSubjectsCount} รายวิชา</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Timetable Weekly Table Grid */}
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full text-center border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50/90 text-[11px] font-bold text-slate-700 border-b border-slate-200">
+                  <th className="py-3.5 px-3 w-28 border-r border-slate-200 bg-slate-100/90 text-slate-800 font-black">
+                    วัน / คาบ
+                  </th>
+                  {sortedPeriods.map((p) => (
+                    <th
+                      key={p.id}
+                      className={`py-3 px-2 border-r border-slate-200 min-w-[130px] ${
+                        p.isLunchBreak ? 'bg-amber-50/80 text-amber-900 font-black' : ''
+                      }`}
+                    >
+                      <div className="font-extrabold">{p.isLunchBreak ? '🍽️ พักกลางวัน' : p.name}</div>
+                      <div className="text-[10px] font-mono font-normal text-slate-500 mt-0.5">
+                        {p.startTime} - {p.endTime} น.
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {DAYS.map((day) => {
+                  const dayConfig = DAY_CONFIG[day];
+                  const dayAssignments = filteredAssignments.filter((a) => a.dayOfWeek === day);
+                  const dayTotalPeriods = dayAssignments.reduce(
+                    (acc, a) => acc + getAssignmentPeriodSpan(a),
+                    0
+                  );
+
+                  const cells: React.ReactNode[] = [];
+                  let skipCount = 0;
+
+                  for (let i = 0; i < sortedPeriods.length; i++) {
+                    if (skipCount > 0) {
+                      skipCount--;
+                      continue;
+                    }
+
+                    const period = sortedPeriods[i];
+
+                    if (period.isLunchBreak) {
+                      cells.push(
+                        <td
+                          key={period.id}
+                          className="p-2 border-r border-slate-200 bg-amber-50/40 text-amber-900 text-[11px] font-semibold text-center align-middle"
+                        >
+                          <div className="py-3 px-1 text-slate-400 font-medium">
+                            พักกลางวัน
+                          </div>
+                        </td>
+                      );
+                      continue;
+                    }
+
+                    // Check assignment starting at this period
+                    const assignment = dayAssignments.find((a) => a.periodId === period.id);
+
+                    if (assignment) {
+                      let span = 1;
+                      if (assignment.endPeriodId && assignment.endPeriodId !== assignment.periodId) {
+                        const sIdx = sortedPeriods.findIndex((p) => p.id === assignment.periodId);
+                        const eIdx = sortedPeriods.findIndex((p) => p.id === assignment.endPeriodId);
+                        if (sIdx !== -1 && eIdx >= sIdx) {
+                          span = eIdx - sIdx + 1;
+                        }
+                      } else {
+                        const computedSpan = getAssignmentPeriodSpan(assignment);
+                        if (computedSpan > 1) {
+                          span = Math.min(computedSpan, sortedPeriods.length - i);
+                        }
+                      }
+                      skipCount = span - 1;
+
+                      const startP = sortedPeriods.find((p) => p.id === assignment.periodId) || period;
+                      const endP = assignment.endPeriodId
+                        ? sortedPeriods.find((p) => p.id === assignment.endPeriodId) || startP
+                        : sortedPeriods[Math.min(sortedPeriods.length - 1, i + span - 1)] || startP;
+
+                      cells.push(
+                        <td
+                          key={period.id}
+                          colSpan={span}
+                          className="p-1.5 border-r border-slate-200 align-top"
+                        >
+                          <div
+                            className="group relative h-full min-h-[102px] rounded-2xl p-2.5 border transition-all hover:shadow-md cursor-pointer flex flex-col justify-between"
+                            style={{
+                              backgroundColor: `${assignment.color || '#0C7C82'}12`,
+                              borderColor: `${assignment.color || '#0C7C82'}50`
+                            }}
+                            onClick={() => openEditModal(assignment)}
+                            title="คลิกเพื่อแก้ไขการมอบหมายสอน"
+                          >
+                            <div>
+                              <div className="flex items-start justify-between gap-1 mb-1">
+                                <span
+                                  className="px-2 py-0.5 rounded-md text-[11px] font-black shadow-2xs"
+                                  style={{
+                                    backgroundColor: assignment.color || '#0C7C82',
+                                    color: '#ffffff'
+                                  }}
+                                >
+                                  {assignment.className}
+                                </span>
+
+                                {span > 1 && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white text-slate-700 border border-slate-200 shadow-2xs font-mono">
+                                    {span} คาบ
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="text-left mt-1">
+                                <div className="font-extrabold text-xs text-slate-900 leading-snug">
+                                  {assignment.subjectCode}
+                                </div>
+                                <div className="text-[11px] text-slate-700 font-medium line-clamp-2 leading-tight mt-0.5">
+                                  {assignment.subjectName}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-1 mt-2 pt-1 border-t border-slate-200/60 text-[10px]">
+                              <span className="font-mono text-slate-500 font-medium">
+                                {startP.startTime} - {endP.endTime}
+                              </span>
+
+                              <div
+                                className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity no-print"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => openEditModal(assignment)}
+                                  className="p-1 rounded-md bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs cursor-pointer"
+                                  title="แก้ไข"
+                                >
+                                  <Edit2 className="w-2.5 h-2.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(assignment)}
+                                  className="p-1 rounded-md bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 shadow-2xs cursor-pointer"
+                                  title="ลบ"
+                                >
+                                  <Trash2 className="w-2.5 h-2.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      );
+                    } else {
+                      cells.push(
+                        <td
+                          key={period.id}
+                          className="p-1.5 border-r border-slate-200 align-middle text-center group transition-colors hover:bg-teal-50/30 cursor-pointer"
+                          onClick={() => openAddModal(filterTeacher, day, period.id)}
+                          title={`คลิกเพื่อมอบหมายการสอน วัน${day} ${period.name} (${period.startTime}-${period.endTime})`}
+                        >
+                          <div className="h-full min-h-[102px] py-3 px-1 rounded-2xl border-2 border-dashed border-slate-200 group-hover:border-[#0C7C82] group-hover:bg-white flex flex-col items-center justify-center gap-1 transition-all">
+                            <div className="w-6 h-6 rounded-full bg-slate-100 group-hover:bg-[#0C7C82] flex items-center justify-center transition-colors">
+                              <Plus className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition-colors" />
+                            </div>
+                            <span className="text-[10px] text-slate-400 group-hover:text-[#0C7C82] font-semibold">
+                              ว่าง
+                            </span>
+                          </div>
+                        </td>
+                      );
+                    }
+                  }
+
+                  return (
+                    <tr key={day} className="hover:bg-slate-50/30 transition-colors">
+                      <td
+                        className={`p-3 border-r border-slate-200 text-center align-middle font-bold ${dayConfig.bg}`}
+                      >
+                        <div className="flex flex-col items-center justify-center gap-1">
+                          <span
+                            className={`px-2.5 py-1 rounded-lg text-xs font-black shadow-2xs ${dayConfig.badge}`}
+                          >
+                            {dayConfig.label}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-semibold">
+                            {dayTotalPeriods} คาบ
+                          </span>
+                        </div>
+                      </td>
+                      {cells}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-500 pt-1 gap-2 no-print">
+            <span className="flex items-center gap-1.5">
+              <Info className="w-3.5 h-3.5 text-[#0C7C82] shrink-0" />
+              <span>คลิกที่กล่องรายวิชาเพื่อแก้ไข หรือคลิกที่ช่อง "ว่าง" เพื่อมอบหมายการสอนในคาบนั้นทันที</span>
+            </span>
+            <span className="font-mono text-slate-400 text-[11px]">
+              มีทั้งหมด {teachingPeriods.length} คาบสอนต่อวัน (ไม่รวมพักกลางวัน)
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Tip Banner when "All Teachers" is selected */}
+      {filterTeacher === 'all' && (
+        <div className="p-3.5 rounded-2xl bg-teal-50/80 border border-teal-200 text-teal-900 text-xs flex items-center justify-between gap-3 no-print">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-[#0C7C82] shrink-0" />
+            <span>
+              <strong>คำแนะนำ:</strong> เลือกครูผู้สอนจากตัวกรองด้านบน หรือคลิกที่ชื่อครูในตารางด้านล่าง เพื่อเปิดดูตารางสอนประจำสัปดาห์ (Timetable) เฉพาะบุคคล
+            </span>
+          </div>
+          <span className="text-[11px] font-semibold text-teal-700 bg-white px-2 py-0.5 rounded-md border border-teal-200 shrink-0 hidden sm:inline">
+            รองรับการพิมพ์ตารางสอน
+          </span>
+        </div>
+      )}
+
       {/* Report Table by Teacher (แสดงรายงานเป็นตารางตามชื่อครูผู้สอน) */}
-      <div className="bg-white rounded-3xl border border-slate-100 shadow-xs overflow-hidden">
+      {(viewMode !== 'timetable' || filterTeacher === 'all') && (
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-xs overflow-hidden no-print">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -550,11 +1237,21 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                     <td className="py-4 px-6 text-center text-xs text-slate-400 font-bold">
                       {(currentPage - 1) * itemsPerPage + idx + 1}
                     </td>
-                    <td className="py-4 px-6 font-bold text-slate-800 flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-teal-50 text-[#0C7C82] flex items-center justify-center text-xs">
-                        <User className="w-3.5 h-3.5" />
-                      </div>
-                      <span>{a.teacherName}</span>
+                    <td className="py-4 px-6 font-bold text-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFilterTeacher(a.teacherUsername);
+                          setCurrentPage(1);
+                        }}
+                        className="flex items-center gap-2 hover:text-[#0C7C82] transition-colors cursor-pointer text-left group"
+                        title="คลิกเพื่อกรองและเปิดดูตารางสอนของครูท่านนี้"
+                      >
+                        <div className="w-7 h-7 rounded-full bg-teal-50 text-[#0C7C82] group-hover:bg-[#0C7C82] group-hover:text-white flex items-center justify-center text-xs transition-colors">
+                          <User className="w-3.5 h-3.5" />
+                        </div>
+                        <span className="group-hover:underline">{a.teacherName}</span>
+                      </button>
                     </td>
                     <td className="py-4 px-6 font-semibold text-slate-700">
                       วัน{a.dayOfWeek}
@@ -627,11 +1324,12 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
           </div>
         )}
       </div>
+      )}
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
               <h3 className="text-lg font-bold text-slate-800">
                 {editingAssignment ? 'แก้ไขการมอบหมายสอน' : 'มอบหมายชั้นเรียนที่สอน'}
@@ -780,11 +1478,15 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                           required
                           className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82]"
                         >
-                          {teachingPeriods.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name} ({p.startTime}-{p.endTime})
-                            </option>
-                          ))}
+                          {teachingPeriods.map((p) => {
+                            const occ = getPeriodAssignmentInClass(p.id);
+                            const occNote = occ ? ` [⚠️ ซ้ำ: ${occ.subjectCode} (${occ.teacherName})]` : '';
+                            return (
+                              <option key={p.id} value={p.id}>
+                                {p.name} ({p.startTime}-{p.endTime}){occNote}
+                              </option>
+                            );
+                          })}
                         </select>
                       </div>
 
@@ -802,11 +1504,14 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                             const isBeforeStart = idx < startIdx;
                             const exceedsRemaining = span > remainingSubjectPeriods;
                             const isDisabled = isBeforeStart || exceedsRemaining;
+                            const occ = getPeriodAssignmentInClass(p.id);
                             let spanLabel = '';
                             if (isBeforeStart) {
                               spanLabel = ' (ก่อนคาบเริ่มต้น)';
                             } else if (exceedsRemaining) {
                               spanLabel = ` (เกินโควตาที่เหลือ ${remainingSubjectPeriods} คาบ)`;
+                            } else if (occ) {
+                              spanLabel = ` [⚠️ ซ้ำ: ${occ.subjectCode}]`;
                             } else {
                               spanLabel = ` [เลือก ${span} คาบ]`;
                             }
@@ -883,15 +1588,145 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                       required
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82]"
                     >
-                      {teachingPeriods.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.startTime}-{p.endTime})
-                        </option>
-                      ))}
+                      {teachingPeriods.map((p) => {
+                        const occ = getPeriodAssignmentInClass(p.id);
+                        const occNote = occ ? ` [⚠️ ซ้ำ: ${occ.subjectCode} (${occ.teacherName})]` : '';
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({p.startTime}-{p.endTime}){occNote}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 </div>
               )}
+
+              {/* Classroom Period Duplication & Schedule Preview System */}
+              <div className="space-y-2.5 pt-1">
+                {/* Conflict Alert: Classroom duplicate period */}
+                {classroomConflicts.length > 0 && (
+                  <div className="p-3.5 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-950 text-xs space-y-2 shadow-xs animate-shake">
+                    <div className="flex items-center gap-2 font-bold text-rose-700 text-sm">
+                      <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                      <span>พบข้อมูลคาบเรียนซ้ำซ้อนในชั้นเรียน!</span>
+                    </div>
+                    <p className="text-slate-700 text-xs leading-relaxed">
+                      ห้อง <strong>{selectedClass?.name}</strong> ใน <strong>วัน{dayOfWeek}</strong> มีวิชาที่ลงตารางสอนในช่วงเวลานี้แล้ว:
+                    </p>
+                    <div className="space-y-1.5">
+                      {classroomConflicts.map((c) => (
+                        <div
+                          key={c.id}
+                          className="p-2.5 bg-white/95 rounded-xl border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-1 shadow-2xs"
+                        >
+                          <div>
+                            <div className="font-bold text-rose-900 flex items-center gap-1.5">
+                              <span className="font-mono bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded text-[11px]">
+                                {c.subjectCode}
+                              </span>
+                              <span>{c.subjectName}</span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 mt-0.5">
+                              ผู้สอน: <span className="font-semibold text-slate-700">{c.teacherName}</span>
+                            </div>
+                          </div>
+                          <span className="px-2 py-1 rounded-lg bg-rose-100 text-rose-800 font-mono text-[11px] font-bold self-start sm:self-auto shrink-0">
+                            {c.overlappingNames ? `ซ้ำ: ${c.overlappingNames}` : c.periodName}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-rose-700 font-semibold flex items-center gap-1 pt-0.5">
+                      <span>⛔ ไม่สามารถบันทึกได้เนื่องจากเวลาเรียนชนกัน กรุณาเลือกคาบสอนอื่นหรือวันอื่น</span>
+                    </p>
+                  </div>
+                )}
+
+                {/* Conflict Alert: Teacher timetable conflict (in another classroom) */}
+                {teacherConflicts.length > 0 && classroomConflicts.length === 0 && (
+                  <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 text-xs space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-amber-800">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>คำเตือน: ครูผู้สอนติดตารางสอนห้องอื่นในช่วงเวลานี้</span>
+                    </div>
+                    <div className="space-y-1">
+                      {teacherConflicts.map((tc) => (
+                        <div key={tc.id} className="text-slate-700">
+                          ครู <strong>{tc.teacherName}</strong> มีตารางสอนวิชา <strong>{tc.subjectCode} {tc.subjectName}</strong> ที่ห้อง <strong>{tc.className}</strong> ({tc.periodName})
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-amber-700 font-medium">
+                      * กรุณาเปลี่ยนคาบสอนเพื่อป้องกันครูมีตารางสอนชนกัน
+                    </p>
+                  </div>
+                )}
+
+                {/* All-Clear Badge */}
+                {classroomConflicts.length === 0 && teacherConflicts.length === 0 && periodId && (
+                  <div className="p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      <strong>คาบเรียนว่าง ไม่ซ้ำซ้อน:</strong> ห้อง {selectedClass?.name || '-'} วัน{dayOfWeek} ช่วงเวลาที่เลือกสามารถลงตารางได้
+                    </span>
+                  </div>
+                )}
+
+                {/* Visual Day-Schedule Strip for Classroom */}
+                <div className="p-3 bg-slate-50/90 rounded-2xl border border-slate-200/80">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-2">
+                    <span>ตารางคาบสอนห้อง {selectedClass?.name} (วัน{dayOfWeek})</span>
+                    <span className="text-[11px] text-slate-500 font-normal">
+                      {classroomDayAssignments.length > 0
+                        ? `ลงตารางแล้ว ${classroomDayAssignments.length} วิชา`
+                        : 'ยังไม่มีวิชาใดลงตารางในวันนี้'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 text-center">
+                    {teachingPeriods.map((p, idx) => {
+                      const isCurrent = idx >= selectedStartIdx && idx <= selectedEndIdx;
+                      const existingAssigned = getPeriodAssignmentInClass(p.id);
+                      const isConflict = isCurrent && existingAssigned;
+
+                      let bgClass = 'bg-white border-slate-200 text-slate-600';
+                      if (isConflict) {
+                        bgClass = 'bg-rose-100 border-rose-400 text-rose-900 ring-2 ring-rose-400 font-bold';
+                      } else if (isCurrent) {
+                        bgClass = 'bg-teal-100 border-[#0C7C82] text-teal-900 ring-2 ring-[#0C7C82] font-bold';
+                      } else if (existingAssigned) {
+                        bgClass = 'bg-slate-200/90 border-slate-300 text-slate-700 font-medium';
+                      }
+
+                      return (
+                        <div
+                          key={p.id}
+                          className={`p-1 rounded-xl border text-[10px] flex flex-col justify-between min-h-[50px] transition-all ${bgClass}`}
+                          title={
+                            existingAssigned
+                              ? `${existingAssigned.subjectCode} ${existingAssigned.subjectName} (${existingAssigned.teacherName})`
+                              : `${p.name} ว่าง`
+                          }
+                        >
+                          <span className="font-bold truncate">{p.name.replace('คาบที่ ', 'คาบ ')}</span>
+                          <span className="text-[9px] font-mono opacity-75">{p.startTime}</span>
+                          {isConflict ? (
+                            <span className="text-[9px] text-rose-700 font-bold">ซ้ำซ้อน!</span>
+                          ) : isCurrent ? (
+                            <span className="text-[9px] text-teal-800 font-bold">เลือก</span>
+                          ) : existingAssigned ? (
+                            <span className="text-[9px] text-slate-600 truncate font-semibold" title={existingAssigned.subjectCode}>
+                              {existingAssigned.subjectCode}
+                            </span>
+                          ) : (
+                            <span className="text-[9px] text-emerald-600 font-medium">ว่าง</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
 
               {/* Color picker */}
               <div>
@@ -937,8 +1772,8 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isSaving}
-                  className="px-5 py-2 rounded-xl text-white text-xs font-medium bg-[#0C7C82] hover:bg-[#096368] shadow-md shadow-[#0C7C82]/20 cursor-pointer flex items-center gap-1.5"
+                  disabled={isSaving || classroomConflicts.length > 0 || teacherConflicts.length > 0}
+                  className="px-5 py-2 rounded-xl text-white text-xs font-medium bg-[#0C7C82] hover:bg-[#096368] disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-[#0C7C82]/20 cursor-pointer flex items-center gap-1.5 transition-all"
                 >
                   {isSaving && (
                     <svg className="animate-spin h-3.5 w-3.5 text-white" viewBox="0 0 24 24">
@@ -946,7 +1781,19 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                     </svg>
                   )}
-                  <span>บันทึกข้อมูล</span>
+                  {classroomConflicts.length > 0 ? (
+                    <span className="flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>คาบเรียนซ้ำซ้อน (ไม่สามารถบันทึก)</span>
+                    </span>
+                  ) : teacherConflicts.length > 0 ? (
+                    <span className="flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      <span>ครูติดสอนห้องอื่น (ไม่สามารถบันทึก)</span>
+                    </span>
+                  ) : (
+                    <span>บันทึกข้อมูล</span>
+                  )}
                 </button>
               </div>
             </form>

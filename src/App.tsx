@@ -527,6 +527,26 @@ export default function App() {
     showToast('success', 'ลบการมอบหมายสอนสำเร็จ');
   };
 
+  const handleDeleteAllAssignments = async (targetIds?: string[]) => {
+    const toDelete = targetIds && targetIds.length > 0
+      ? assignments.filter((a) => targetIds.includes(a.id))
+      : assignments;
+
+    if (toDelete.length === 0) {
+      showToast('warning', 'ไม่มีข้อมูลการมอบหมายสอนให้ลบ');
+      return;
+    }
+
+    // Process in batches of 400 to respect Firestore limit
+    for (let i = 0; i < toDelete.length; i += 400) {
+      const chunk = toDelete.slice(i, i + 400);
+      const batch = writeBatch(db);
+      chunk.forEach((a) => batch.delete(doc(db, 'assignments', a.id)));
+      await batch.commit();
+    }
+    showToast('success', `ลบการมอบหมายชั้นเรียนทั้งหมด (${toDelete.length} รายการ) เรียบร้อยแล้ว`);
+  };
+
   // Attendance mutations
   const handleSaveAttendance = async (log: Omit<AttendanceLog, 'id'>) => {
     const id = `att_${Date.now()}`;
@@ -820,9 +840,11 @@ export default function App() {
                       subjects={subjects}
                       periods={periods}
                       activeYear={activeYear}
+                      systemSettings={settings}
                       onAddAssignment={handleAddAssignment}
                       onUpdateAssignment={handleUpdateAssignment}
                       onDeleteAssignment={handleDeleteAssignment}
+                      onDeleteAllAssignments={handleDeleteAllAssignments}
                       openConfirm={openConfirm}
                       showToast={showToast}
                     />
