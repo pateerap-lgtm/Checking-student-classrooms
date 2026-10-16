@@ -849,6 +849,34 @@ export default function App() {
                       showToast={showToast}
                     />
                   )}
+                  {currentTab === 'report' && (
+                    <TeacherReportView
+                      attendanceLogs={attendanceLogs}
+                      assignments={assignments}
+                      allAttendanceLogs={attendanceLogs}
+                      allAssignments={assignments}
+                      classes={classes}
+                      subjects={subjects}
+                      students={students}
+                      teachers={users.filter((u) => u.role === 'teacher')}
+                      periods={periods}
+                      settings={settings}
+                      teacherUsername={currentUser.username}
+                      teacherFullName={currentUser.fullName}
+                      currentUserRole={currentUser.role}
+                      activeYear={activeYear}
+                      initialStudentId={pendingReportStudent?.studentId}
+                      initialClassId={pendingReportStudent?.classId}
+                      onClearInitialStudent={() => setPendingReportStudent(null)}
+                      onUpdateAttendance={handleUpdateAttendance}
+                      onSaveAttendance={handleSaveAttendance}
+                      onNavigateTab={setCurrentTab}
+                      onSelectAssignmentForAttendance={(assignment) => {
+                        setPendingAttendanceAssignment(assignment);
+                        setCurrentTab('attendance');
+                      }}
+                    />
+                  )}
                 </>
               )}
 
@@ -899,20 +927,30 @@ export default function App() {
                   )}
                   {currentTab === 'report' && (
                     <TeacherReportView
-                      attendanceLogs={attendanceLogs.filter((l) => l.teacherUsername === currentUser.username)}
-                      assignments={assignments.filter((a) => a.teacherUsername === currentUser.username)}
+                      attendanceLogs={attendanceLogs}
+                      assignments={assignments}
+                      allAttendanceLogs={attendanceLogs}
+                      allAssignments={assignments}
                       classes={classes}
                       subjects={subjects}
                       students={students}
+                      teachers={users.filter((u) => u.role === 'teacher')}
+                      periods={periods}
                       settings={settings}
                       teacherUsername={currentUser.username}
                       teacherFullName={currentUser.fullName}
+                      currentUserRole={currentUser.role}
                       activeYear={activeYear}
                       initialStudentId={pendingReportStudent?.studentId}
                       initialClassId={pendingReportStudent?.classId}
                       onClearInitialStudent={() => setPendingReportStudent(null)}
                       onUpdateAttendance={handleUpdateAttendance}
                       onSaveAttendance={handleSaveAttendance}
+                      onNavigateTab={setCurrentTab}
+                      onSelectAssignmentForAttendance={(assignment) => {
+                        setPendingAttendanceAssignment(assignment);
+                        setCurrentTab('attendance');
+                      }}
                     />
                   )}
                   {currentTab === 'profile' && (

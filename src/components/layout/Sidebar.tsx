@@ -52,6 +52,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'students', label: 'จัดการนักเรียน', icon: UserCheck, color: 'text-[#0288D1]' },
     { id: 'subjects', label: 'จัดการรายวิชา', icon: BookOpen, color: 'text-[#4A2C6D]' },
     { id: 'assignments', label: 'มอบหมายชั้นเรียนที่สอน', icon: CalendarCheck, color: 'text-[#F57C00]' },
+    { id: 'report', label: 'รายงานการเช็คชื่อ', icon: FileText, color: 'text-[#26A69A]' },
   ];
 
   const teacherMenuItems = [
