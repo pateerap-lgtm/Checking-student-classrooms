@@ -510,7 +510,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
           <div className="text-xs text-slate-500 pt-2 border-t border-slate-50 flex items-center justify-between">
             <span>ผู้ดูแลระบบ {users.filter((u) => u.role === 'admin').length}</span>
-            <span>• ผู้บริหาร {users.filter((u) => u.role === 'director').length}</span>
+            <span>• ผู้อำนวยการสถานศึกษา {users.filter((u) => u.role === 'director').length}</span>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { School, Upload, Save, Building, Image as ImageIcon, Check } from 'lucide-react';
+import { School, Upload, Save, Building, Image as ImageIcon, Check, UserCheck } from 'lucide-react';
 import { SystemSettings } from '../../types';
 
 interface SystemSettingsViewProps {
@@ -15,6 +15,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
 }) => {
   const [schoolName, setSchoolName] = useState(settings.schoolName);
   const [affiliationName, setAffiliationName] = useState(settings.affiliationName);
+  const [directorName, setDirectorName] = useState(settings.directorName || 'ดร.สุรัตน์ มีเกียรติ');
   const [logoUrl, setLogoUrl] = useState(settings.logoUrl || '');
   const [previewUrl, setPreviewUrl] = useState(settings.logoUrl || '');
   const [isSaving, setIsSaving] = useState(false);
@@ -47,6 +48,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
       await onSaveSettings({
         schoolName: schoolName.trim(),
         affiliationName: affiliationName.trim(),
+        directorName: directorName.trim(),
         logoUrl: logoUrl,
         updatedAt: new Date().toISOString()
       });
@@ -158,6 +160,28 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 onChange={(e) => setAffiliationName(e.target.value)}
                 placeholder="เช่น สำนักงานเขตพื้นที่การศึกษาประถมศึกษาอุดรธานี เขต 3"
                 required
+                className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] text-sm text-slate-800 bg-white"
+              />
+            </div>
+          </div>
+
+          {/* Director Name */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 flex items-center justify-between">
+              <span>ชื่อผู้อำนวยการสถานศึกษา</span>
+              <span className="text-[10px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md font-normal">
+                แสดงในช่องลงนามรายงาน PDF และแบบ ปพ.5
+              </span>
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <UserCheck className="w-5 h-5" />
+              </div>
+              <input
+                type="text"
+                value={directorName}
+                onChange={(e) => setDirectorName(e.target.value)}
+                placeholder="เช่น ดร.สุรัตน์ มีเกียรติ หรือ นายสมศักดิ์ สุขใจ"
                 className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] text-sm text-slate-800 bg-white"
               />
             </div>

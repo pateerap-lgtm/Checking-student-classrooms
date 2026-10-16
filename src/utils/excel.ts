@@ -50,9 +50,9 @@ export function downloadClassTemplate() {
 
 export function downloadUserTemplate() {
   const sampleData = [
-    { 'username': 'teacher_somchai', 'password': 'pass123', 'ชื่อ-นามสกุล': 'นายสมชาย ดีเลิศ', 'บทบาท(ผู้ดูแลระบบ/ผู้บริหาร/ครู)': 'ครู' },
-    { 'username': 'admin_wichai', 'password': 'pass123', 'ชื่อ-นามสกุล': 'นายวิชัย สุขใจ', 'บทบาท(ผู้ดูแลระบบ/ผู้บริหาร/ครู)': 'ผู้ดูแลระบบ' },
-    { 'username': 'director_surat', 'password': 'pass123', 'ชื่อ-นามสกุล': 'ดร.สุรัตน์ มีเกียรติ', 'บทบาท(ผู้ดูแลระบบ/ผู้บริหาร/ครู)': 'ผู้บริหาร' },
+    { 'username': 'teacher_somchai', 'password': 'pass123', 'ชื่อ-นามสกุล': 'นายสมชาย ดีเลิศ', 'บทบาท(ผู้ดูแลระบบ/ผู้อำนวยการสถานศึกษา/ครู)': 'ครู' },
+    { 'username': 'admin_wichai', 'password': 'pass123', 'ชื่อ-นามสกุล': 'นายวิชัย สุขใจ', 'บทบาท(ผู้ดูแลระบบ/ผู้อำนวยการสถานศึกษา/ครู)': 'ผู้ดูแลระบบ' },
+    { 'username': 'director_surat', 'password': 'pass123', 'ชื่อ-นามสกุล': 'ดร.สุรัตน์ มีเกียรติ', 'บทบาท(ผู้ดูแลระบบ/ผู้อำนวยการสถานศึกษา/ครู)': 'ผู้อำนวยการสถานศึกษา' },
   ];
   exportToExcel(sampleData, 'แบบฟอร์มนำเข้า_ผู้ใช้งาน', 'ผู้ใช้งาน');
 }

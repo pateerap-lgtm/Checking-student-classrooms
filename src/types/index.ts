@@ -4,6 +4,7 @@ export interface SystemSettings {
   schoolName: string;
   affiliationName: string;
   logoUrl: string;
+  directorName?: string;
   updatedAt?: string;
 }
 

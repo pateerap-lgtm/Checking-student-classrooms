@@ -68,6 +68,7 @@ interface TeacherReportViewProps {
   allAttendanceLogs?: AttendanceLog[];
   allAssignments?: TeachingAssignment[];
   teachers?: AppUser[];
+  allUsers?: AppUser[];
   periods?: Period[];
   currentUserRole?: string;
   onUpdateAttendance?: (id: string, log: Partial<AttendanceLog>) => Promise<void>;
@@ -92,6 +93,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
   allAttendanceLogs,
   allAssignments,
   teachers = [],
+  allUsers = [],
   periods = [],
   currentUserRole = 'teacher',
   onUpdateAttendance,
@@ -120,6 +122,18 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
   const effectiveTeacherUsername = isAdminOrDirector && selectedAdminTeacher ? selectedAdminTeacher : teacherUsername;
   const effectiveTeacherObj = teachers.find((t) => t.username === effectiveTeacherUsername);
   const effectiveTeacherFullName = effectiveTeacherObj?.fullName || teacherFullName;
+
+  // Director Name for Signatures in PDF and Official Reports
+  const effectiveDirectorName = useMemo(() => {
+    if (settings.directorName && settings.directorName.trim()) {
+      return settings.directorName.trim();
+    }
+    const dirUser = (allUsers || []).find((u) => u.role === 'director');
+    if (dirUser && dirUser.fullName && dirUser.fullName.trim()) {
+      return dirUser.fullName.trim();
+    }
+    return 'ดร.สุรัตน์ มีเกียรติ';
+  }, [settings.directorName, allUsers]);
 
   // --- DAILY TEACHER ATTENDANCE AUDIT STATE & COMPUTATIONS ---
   const [selectedAuditDate, setSelectedAuditDate] = useState<string>(getTodayISODate());
@@ -935,13 +949,13 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
           )}
         </div>
 
-        {/* 3-Signatory Block: Teacher, Academic Head, Parent */}
+        {/* 3-Signatory Block: Teacher, School Director, Parent */}
         <div className="grid grid-cols-3 gap-4 pt-6 text-center text-xs text-slate-800 print:pt-4 print:break-inside-avoid">
           <div className="space-y-4">
             <p className="leading-relaxed">
               ลงชื่อ........................................................
             </p>
-            <p className="font-semibold">({teacherFullName})</p>
+            <p className="font-semibold">({effectiveTeacherFullName})</p>
             <p className="text-[11px] text-slate-500">ครูผู้สอน</p>
             <p className="text-[11px] text-slate-400">
               วันที่........./........./..........
@@ -952,8 +966,8 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
             <p className="leading-relaxed">
               ลงชื่อ........................................................
             </p>
-            <p className="font-semibold">(........................................................)</p>
-            <p className="text-[11px] text-slate-500">หัวหน้าฝ่ายวิชาการ / ผู้บริหาร</p>
+            <p className="font-semibold">({effectiveDirectorName})</p>
+            <p className="text-[11px] text-slate-600 font-medium">ผู้อำนวยการสถานศึกษา</p>
             <p className="text-[11px] text-slate-400">
               วันที่........./........./..........
             </p>
@@ -1950,8 +1964,8 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
 
               <div className="space-y-4">
                 <p className="leading-relaxed">ลงชื่อ........................................................</p>
-                <p className="font-semibold">(........................................................)</p>
-                <p className="text-[11px] text-slate-600">ผู้อำนวยการสถานศึกษา</p>
+                <p className="font-semibold">({effectiveDirectorName})</p>
+                <p className="text-[11px] text-slate-600 font-medium">ผู้อำนวยการสถานศึกษา</p>
                 <p className="text-[11px] text-slate-500">วันที่........./........./..........</p>
               </div>
             </div>
@@ -2241,7 +2255,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
               <p className="leading-relaxed">
                 ลงชื่อ..................................................................ครูผู้สอน
               </p>
-              <p className="font-semibold">({teacherFullName})</p>
+              <p className="font-semibold">({effectiveTeacherFullName})</p>
               <p className="text-[11px] text-slate-500">
                 วันที่.........เดือน..................................พ.ศ. {activeYear?.name || '2569'}
               </p>
@@ -2249,9 +2263,12 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
 
             <div className="space-y-6">
               <p className="leading-relaxed">
-                ลงชื่อ..................................................................ผู้บริหาร/ผู้ตรวจ
+                ลงชื่อ..................................................................ผู้อำนวยการสถานศึกษา
               </p>
-              <p className="font-semibold">(..................................................................)</p>
+              <p className="font-semibold">({effectiveDirectorName})</p>
+              <p className="text-[11px] text-slate-600 font-medium">
+                ผู้อำนวยการสถานศึกษา
+              </p>
               <p className="text-[11px] text-slate-500">
                 วันที่.........เดือน..................................พ.ศ. {activeYear?.name || '2569'}
               </p>

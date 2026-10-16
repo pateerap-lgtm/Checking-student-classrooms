@@ -77,7 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case 'admin':
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">ผู้ดูแลระบบ</span>;
       case 'director':
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">ผู้บริหาร</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">ผู้อำนวยการสถานศึกษา</span>;
       case 'teacher':
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-800">ครูผู้สอน</span>;
       default:
@@ -127,7 +127,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Nav Menu Items */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1.5">
         <div className="px-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-          เมนูหลัก ({role === 'admin' ? 'แอดมิน' : role === 'director' ? 'ผู้บริหาร' : role === 'teacher' ? 'อาจารย์' : 'นักเรียน'})
+          เมนูหลัก ({role === 'admin' ? 'ผู้ดูแลระบบ' : role === 'director' ? 'ผู้อำนวยการสถานศึกษา' : role === 'teacher' ? 'อาจารย์' : 'นักเรียน'})
         </div>
         {menuItems.map((item) => {
           const Icon = item.icon;

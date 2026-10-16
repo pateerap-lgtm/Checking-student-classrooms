@@ -688,7 +688,7 @@ export default function App() {
                   {currentUser.role === 'admin'
                     ? 'ผู้ดูแลระบบ'
                     : currentUser.role === 'director'
-                    ? 'ผู้บริหาร'
+                    ? 'ผู้อำนวยการสถานศึกษา'
                     : currentUser.role === 'teacher'
                     ? 'ครูผู้สอน'
                     : 'นักเรียน'}
@@ -859,6 +859,7 @@ export default function App() {
                       subjects={subjects}
                       students={students}
                       teachers={users.filter((u) => u.role === 'teacher')}
+                      allUsers={users}
                       periods={periods}
                       settings={settings}
                       teacherUsername={currentUser.username}
@@ -935,6 +936,7 @@ export default function App() {
                       subjects={subjects}
                       students={students}
                       teachers={users.filter((u) => u.role === 'teacher')}
+                      allUsers={users}
                       periods={periods}
                       settings={settings}
                       teacherUsername={currentUser.username}

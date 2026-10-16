@@ -132,7 +132,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-slate-800 tracking-tight">เข้าสู่ระบบ</h2>
             <p className="text-sm text-slate-500 mt-1">
-              เข้าใช้งานสำหรับผู้ดูแลระบบ, ผู้บริหาร, ครูผู้สอน และนักเรียน
+              เข้าใช้งานสำหรับผู้ดูแลระบบ, ผู้อำนวยการสถานศึกษา, ครูผู้สอน และนักเรียน
             </p>
           </div>
 

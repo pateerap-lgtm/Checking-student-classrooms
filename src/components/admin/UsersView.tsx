@@ -104,7 +104,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
       'username': u.username,
       'password': u.password,
       'ชื่อ-นามสกุล': u.fullName,
-      'บทบาท': u.role === 'admin' ? 'ผู้ดูแลระบบ' : u.role === 'director' ? 'ผู้บริหาร' : 'ครู'
+      'บทบาท': u.role === 'admin' ? 'ผู้ดูแลระบบ' : u.role === 'director' ? 'ผู้อำนวยการสถานศึกษา' : 'ครู'
     }));
     exportToExcel(exportData, 'รายชื่อผู้ใช้งานระบบ_บุคลากร', 'ผู้ใช้งาน');
     showToast('success', 'ส่งออกข้อมูลผู้ใช้งานสำเร็จ');
@@ -122,10 +122,15 @@ export const UsersView: React.FC<UsersViewProps> = ({
       }
 
       const importedUsers: Omit<AppUser, 'id'>[] = parsedData.map((row: any) => {
-        const rawRole = String(row['บทบาท(ผู้ดูแลระบบ/ผู้บริหาร/ครู)'] || row['บทบาท'] || 'ครู');
+        const rawRole = String(
+          row['บทบาท(ผู้ดูแลระบบ/ผู้อำนวยการสถานศึกษา/ครู)'] ||
+          row['บทบาท(ผู้ดูแลระบบ/ผู้บริหาร/ครู)'] ||
+          row['บทบาท'] ||
+          'ครู'
+        );
         let mappedRole: 'admin' | 'director' | 'teacher' = 'teacher';
         if (rawRole.includes('ดูแล') || rawRole.includes('admin')) mappedRole = 'admin';
-        else if (rawRole.includes('บริหาร') || rawRole.includes('director')) mappedRole = 'director';
+        else if (rawRole.includes('ผู้อำนวยการ') || rawRole.includes('บริหาร') || rawRole.includes('director')) mappedRole = 'director';
 
         return {
           username: String(row['username'] || '').trim(),
@@ -154,7 +159,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
       case 'admin':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">ผู้ดูแลระบบ</span>;
       case 'director':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">ผู้บริหาร</span>;
+        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">ผู้อำนวยการสถานศึกษา</span>;
       default:
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-100 text-teal-800">ครู</span>;
     }
@@ -169,7 +174,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
             <span>จัดการผู้ใช้งานระบบ (User Management)</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            กำหนดบัญชีผู้ดูแลระบบ, ผู้บริหาร, และครูผู้สอน
+            กำหนดบัญชีผู้ดูแลระบบ, ผู้อำนวยการสถานศึกษา, และครูผู้สอน
           </p>
         </div>
 
@@ -349,7 +354,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
                 />
               </div>
 
-              {/* Role Radio Group as required: radio บทบาท(ผู้ดูแลระบบ, ผู้บริหาร,และครู) */}
+              {/* Role Radio Group: radio บทบาท(ผู้ดูแลระบบ, ผู้อำนวยการสถานศึกษา, และครู) */}
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">
                   บทบาทผู้ใช้งาน (Role) <span className="text-red-500">*</span>
@@ -382,9 +387,9 @@ export const UsersView: React.FC<UsersViewProps> = ({
                       className="w-4 h-4 text-[#0C7C82] focus:ring-[#0C7C82]"
                     />
                     <div>
-                      <span className="text-xs font-bold text-purple-900 block">ผู้บริหาร (Executive Director)</span>
+                      <span className="text-xs font-bold text-purple-900 block">ผู้อำนวยการสถานศึกษา (School Director)</span>
                       <span className="text-[11px] text-slate-500">
-                        เข้าดูแดชบอร์ด รายงานภาพรวมสถิติ และการมาเรียน
+                        เข้าดูแดชบอร์ด รายงานภาพรวมสถิติ และรายงานการมาเรียน
                       </span>
                     </div>
                   </label>

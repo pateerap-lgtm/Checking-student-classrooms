@@ -75,6 +75,7 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   schoolName: 'โรงเรียนอนุบาลศรีสุทโธ',
   affiliationName: 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษาอุดรธานี เขต 3',
   logoUrl: '',
+  directorName: 'ดร.สุรัตน์ มีเกียรติ',
 };
 
 // Clean empty defaults
