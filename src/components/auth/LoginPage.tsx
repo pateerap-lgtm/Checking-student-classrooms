@@ -80,8 +80,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-teal-50/40 to-slate-100 flex items-center justify-center p-2 sm:p-6 lg:p-8">
-      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col md:flex-row max-h-[95vh]">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-teal-50/40 to-slate-100 flex items-center justify-center p-4 sm:p-6 lg:p-8">
+      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col md:flex-row">
         {/* Left Side: School Branding & Details (Horizontal Card Left Part) */}
         <div className="md:w-5/12 bg-gradient-to-br from-[#0C7C82] via-[#0e8a91] to-[#35B4B0] text-white p-8 sm:p-10 flex flex-col justify-between relative overflow-hidden">
           {/* Decorative circles */}
@@ -137,7 +137,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         </div>
 
         {/* Right Side: Horizontal Card Form Part */}
-        <div className="md:w-7/12 p-6 sm:p-10 flex flex-col justify-center overflow-y-auto">
+        <div className="md:w-7/12 p-8 sm:p-10 flex flex-col justify-center">
           <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div>
               <h2 className="text-2xl font-bold text-slate-800 tracking-tight">เข้าสู่ระบบ</h2>
