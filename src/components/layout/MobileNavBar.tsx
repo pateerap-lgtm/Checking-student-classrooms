@@ -37,23 +37,7 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({
             <span className="text-[10px]">แดชบอร์ด</span>
           </button>
 
-          <button
-            onClick={() => onSelectTab('student-info')}
-            className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all cursor-pointer ${
-              currentTab === 'student-info' ? 'text-[#0288D1] font-semibold' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <div
-              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-                currentTab === 'student-info'
-                  ? 'bg-[#0288D1] text-white shadow-md scale-105'
-                  : 'bg-slate-100 text-slate-600'
-              }`}
-            >
-              <UserCheck className="w-5 h-5" />
-            </div>
-            <span className="text-[10px]">ข้อมูล</span>
-          </button>
+
 
           <button
             onClick={() => onSelectTab('daily-attendance')}

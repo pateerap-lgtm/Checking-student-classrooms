@@ -69,7 +69,6 @@ import { DirectorMonthlyReportView } from './components/director/DirectorMonthly
 
 // Student Views
 import { StudentDashboardView } from './components/student/StudentDashboardView';
-import { StudentInfoView } from './components/student/StudentInfoView';
 import { StudentDailyAttendanceView } from './components/student/StudentDailyAttendanceView';
 import { StudentMonthlyAttendanceView } from './components/student/StudentMonthlyAttendanceView';
 
@@ -1180,7 +1179,7 @@ export default function App() {
               {/* Student Views */}
               {currentUser.role === 'student' && (
                 <>
-                  {(currentTab === 'dashboard' || !['student-info', 'daily-attendance', 'monthly-attendance'].includes(currentTab)) && (
+                  {(currentTab === 'dashboard' || !['daily-attendance', 'monthly-attendance'].includes(currentTab)) && (
                     <StudentDashboardView
                       currentStudent={studentUser}
                       attendanceLogs={currentYearAttendanceLogs}
@@ -1190,16 +1189,6 @@ export default function App() {
                       activeYear={activeYear}
                       settings={settings}
                       onNavigateTab={setCurrentTab}
-                    />
-                  )}
-                  {currentTab === 'student-info' && (
-                    <StudentInfoView
-                      currentStudent={studentUser}
-                      classes={currentYearClasses}
-                      subjects={currentYearSubjects}
-                      teachers={users.filter((u) => u.role === 'teacher')}
-                      activeYear={activeYear}
-                      settings={settings}
                     />
                   )}
                   {currentTab === 'daily-attendance' && (

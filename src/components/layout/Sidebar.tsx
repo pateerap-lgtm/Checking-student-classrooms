@@ -75,7 +75,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const studentMenuItems = [
     { id: 'dashboard', label: 'แดชบอร์ด', icon: LayoutDashboard, color: 'text-[#0C7C82]' },
-    { id: 'student-info', label: 'ข้อมูลนักเรียน', icon: UserCheck, color: 'text-[#0288D1]' },
     { id: 'daily-attendance', label: 'เข้าเรียนรายวัน', icon: CalendarDays, color: 'text-[#26A69A]' },
     { id: 'monthly-attendance', label: 'เข้าเรียนรายเดือน', icon: CalendarRange, color: 'text-[#8E24AA]' },
   ];
