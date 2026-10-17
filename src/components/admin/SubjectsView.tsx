@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BookOpen, Plus, Edit2, Trash2, Download, Upload, FileSpreadsheet, Search, Tag, X } from 'lucide-react';
 import { Subject, SubjectType, Classroom, AcademicYear } from '../../types';
 import { exportToExcel, parseExcelFile, downloadSubjectTemplate } from '../../utils/excel';
+import { Pagination } from '../common/Pagination';
 
 interface SubjectsViewProps {
   subjects: Subject[];
@@ -32,6 +33,10 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Pagination states (40 items per page)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const itemsPerPage = 40;
 
   // Form fields
   const [code, setCode] = useState('');
@@ -180,6 +185,16 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
     return matchesClass && matchesSearch;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredSubjects.length / itemsPerPage));
+  const paginatedSubjects = filteredSubjects.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedClassId]);
+
   const getTypeBadge = (t: SubjectType) => {
     switch (t) {
       case 'พื้นฐาน':
@@ -313,10 +328,12 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredSubjects.map((s, idx) => (
+                paginatedSubjects.map((s, pageIdx) => {
+                  const globalIdx = (currentPage - 1) * itemsPerPage + pageIdx;
+                  return (
                   <tr key={s.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="py-4 px-6 text-center text-xs text-slate-400 font-bold">
-                      {idx + 1}
+                      {globalIdx + 1}
                     </td>
                     <td className="py-4 px-6 font-mono font-bold text-[#0C7C82]">{s.code}</td>
                     <td className="py-4 px-6 font-medium text-slate-800">{s.name}</td>
@@ -346,11 +363,20 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                       </button>
                     </td>
                   </tr>
-                ))
+                );})
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls (40 items per page) */}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredSubjects.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* Modal */}

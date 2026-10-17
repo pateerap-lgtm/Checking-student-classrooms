@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GraduationCap, Plus, Edit2, Trash2, Download, Upload, FileSpreadsheet, ArrowUp, ArrowDown, X, Search, CheckSquare } from 'lucide-react';
 import { Classroom, AcademicYear } from '../../types';
 import { exportToExcel, parseExcelFile, downloadClassTemplate } from '../../utils/excel';
+import { Pagination } from '../common/Pagination';
 
 interface ClassesViewProps {
   classes: Classroom[];
@@ -49,9 +50,23 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
+  // Pagination states (40 items per page as requested)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const itemsPerPage = 40;
+
   const filteredClasses = classes.filter((c) =>
     c.name.toLowerCase().includes(searchTerm.toLowerCase().trim())
   );
+
+  const totalPages = Math.max(1, Math.ceil(filteredClasses.length / itemsPerPage));
+  const paginatedClasses = filteredClasses.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   const handleToggleSelect = (id: string) => {
     setSelectedIds((prev) =>
@@ -351,7 +366,9 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredClasses.map((c, idx) => (
+                paginatedClasses.map((c, pageIdx) => {
+                  const globalIdx = (currentPage - 1) * itemsPerPage + pageIdx;
+                  return (
                   <tr key={c.id} className={`hover:bg-slate-50/50 transition-colors ${selectedIds.includes(c.id) ? 'bg-teal-50/30' : ''}`}>
                     <td className="py-4 px-4 text-center">
                       <input
@@ -362,7 +379,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                       />
                     </td>
                     <td className="py-4 px-6 text-center font-bold text-slate-500 text-xs">
-                      {c.order || idx + 1}
+                      {c.order || globalIdx + 1}
                     </td>
                     <td className="py-4 px-6 font-bold text-slate-800 flex items-center gap-2.5">
                       <span
@@ -383,16 +400,16 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                     <td className="py-4 px-6 text-center">
                       <div className="inline-flex items-center gap-1">
                         <button
-                          onClick={() => handleMove(idx, 'up')}
-                          disabled={idx === 0}
+                          onClick={() => handleMove(globalIdx, 'up')}
+                          disabled={globalIdx === 0}
                           className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
                           title="เลื่อนขึ้น"
                         >
                           <ArrowUp className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => handleMove(idx, 'down')}
-                          disabled={idx === classes.length - 1}
+                          onClick={() => handleMove(globalIdx, 'down')}
+                          disabled={globalIdx === classes.length - 1}
                           className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
                           title="เลื่อนลง"
                         >
@@ -417,11 +434,20 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                       </button>
                     </td>
                   </tr>
-                ))
+                );})
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls (40 items per page) */}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredClasses.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* Modal */}

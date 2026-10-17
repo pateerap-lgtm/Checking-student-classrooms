@@ -32,6 +32,7 @@ import {
   AcademicYear,
   SystemSettings
 } from '../../types';
+import { Pagination } from '../common/Pagination';
 
 interface AssignmentsViewProps {
   assignments: TeachingAssignment[];
@@ -121,9 +122,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<TeachingAssignment | null>(null);
 
-  // Pagination (max 10 teachers/items per page as required)
+  // Pagination (40 items per page as requested)
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 40;
 
   // Filter teacher
   const [filterTeacher, setFilterTeacher] = useState<string>('all');
@@ -1297,32 +1298,14 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
           </table>
         </div>
 
-        {/* Pagination controls (Max 10 per page as required) */}
-        {totalPages > 1 && (
-          <div className="p-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
-            <div>
-              หน้า {currentPage} จากทั้งหมด {totalPages} หน้า
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-30 cursor-pointer flex items-center gap-1"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-                <span>ก่อนหน้า</span>
-              </button>
-              <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-30 cursor-pointer flex items-center gap-1"
-              >
-                <span>ถัดไป</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Pagination controls (40 items per page as required) */}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredAssignments.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
       </div>
       )}
 

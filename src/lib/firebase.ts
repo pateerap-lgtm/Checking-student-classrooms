@@ -76,6 +76,7 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   affiliationName: 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษาอุดรธานี เขต 3',
   logoUrl: '',
   directorName: 'ดร.สุรัตน์ มีเกียรติ',
+  adminPin: '000000',
 };
 
 // Clean empty defaults

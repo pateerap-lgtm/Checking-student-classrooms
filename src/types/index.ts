@@ -5,6 +5,7 @@ export interface SystemSettings {
   affiliationName: string;
   logoUrl: string;
   directorName?: string;
+  adminPin?: string;
   updatedAt?: string;
 }
 

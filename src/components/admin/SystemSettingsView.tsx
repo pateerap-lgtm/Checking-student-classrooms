@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { School, Upload, Save, Building, Image as ImageIcon, Check, UserCheck } from 'lucide-react';
+import { School, Upload, Save, Building, Image as ImageIcon, Check, UserCheck, KeyRound, ShieldCheck, AlertCircle } from 'lucide-react';
 import { SystemSettings } from '../../types';
 
 interface SystemSettingsViewProps {
@@ -20,6 +20,14 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   const [previewUrl, setPreviewUrl] = useState(settings.logoUrl || '');
   const [isSaving, setIsSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Admin PIN management state
+  const currentPin = settings.adminPin || '000000';
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinSuccess, setPinSuccess] = useState<string | null>(null);
+  const [isSavingPin, setIsSavingPin] = useState(false);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -50,12 +58,78 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         affiliationName: affiliationName.trim(),
         directorName: directorName.trim(),
         logoUrl: logoUrl,
+        adminPin: settings.adminPin || '000000',
         updatedAt: new Date().toISOString()
       });
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleChangePin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinError(null);
+    setPinSuccess(null);
+
+    const cleanNewPin = newPin.trim();
+    const cleanConfirmPin = confirmPin.trim();
+
+    if (!/^\d{6}$/.test(cleanNewPin)) {
+      setPinError('รหัส PIN ต้องเป็นตัวเลข 6 หลักเท่านั้น (0-9)');
+      return;
+    }
+
+    if (cleanNewPin !== cleanConfirmPin) {
+      setPinError('รหัส PIN ใหม่ และการยืนยันรหัส PIN ไม่ตรงกัน');
+      return;
+    }
+
+    setIsSavingPin(true);
+    try {
+      await onSaveSettings({
+        ...settings,
+        schoolName: schoolName.trim(),
+        affiliationName: affiliationName.trim(),
+        directorName: directorName.trim(),
+        logoUrl: logoUrl,
+        adminPin: cleanNewPin,
+        updatedAt: new Date().toISOString()
+      });
+      setPinSuccess('เปลี่ยนรหัส PIN ผู้ดูแลระบบเป็น ' + cleanNewPin + ' สำเร็จแล้ว');
+      setNewPin('');
+      setConfirmPin('');
+      setTimeout(() => setPinSuccess(null), 4000);
+    } catch {
+      setPinError('เกิดข้อผิดพลาดในการบันทึกรหัส PIN กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setIsSavingPin(false);
+    }
+  };
+
+  const handleResetPinDefault = async () => {
+    setPinError(null);
+    setPinSuccess(null);
+    setIsSavingPin(true);
+    try {
+      await onSaveSettings({
+        ...settings,
+        schoolName: schoolName.trim(),
+        affiliationName: affiliationName.trim(),
+        directorName: directorName.trim(),
+        logoUrl: logoUrl,
+        adminPin: '000000',
+        updatedAt: new Date().toISOString()
+      });
+      setPinSuccess('รีเซ็ตรหัส PIN กลับเป็นค่าเริ่มต้น (000000) เรียบร้อยแล้ว');
+      setNewPin('');
+      setConfirmPin('');
+      setTimeout(() => setPinSuccess(null), 4000);
+    } catch {
+      setPinError('เกิดข้อผิดพลาดในการรีเซ็ตรหัส PIN');
+    } finally {
+      setIsSavingPin(false);
     }
   };
 
@@ -206,6 +280,124 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                   <>
                     <Save className="w-4 h-4" />
                     <span>บันทึกการตั้งค่า</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Admin PIN Settings Card */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-100 shadow-xs">
+          <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
+            <div className="w-12 h-12 rounded-2xl bg-teal-50 text-[#0C7C82] flex items-center justify-center">
+              <KeyRound className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">ตั้งค่ารหัส PIN ผู้ดูแลระบบ (Admin PIN)</h2>
+              <p className="text-xs text-slate-500">
+                สำหรับใช้กดเข้าสู่ระบบผู้ดูแลระบบผ่านไอคอนลอยมุมล่างขวา (PIN 6 หลัก)
+              </p>
+            </div>
+          </div>
+
+          {/* Current Status Pill */}
+          <div className="mb-6 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-teal-100/60 text-[#0C7C82] flex items-center justify-center font-bold">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">สถานะรหัส PIN ปัจจุบัน</div>
+                <div className="text-sm font-bold font-mono tracking-widest text-slate-800 flex items-center gap-2">
+                  <span>●●●●●●</span>
+                  <span className="text-[11px] font-sans font-normal text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md">
+                    {currentPin === '000000' ? 'ใช้รหัสเริ่มต้น (000000)' : 'กำหนดรหัสเฉพาะแล้ว'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleResetPinDefault}
+              disabled={isSavingPin || currentPin === '000000'}
+              className="px-3.5 py-2 rounded-xl text-xs font-medium text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-40 disabled:pointer-events-none cursor-pointer transition-colors"
+            >
+              รีเซ็ตเป็นค่าเริ่มต้น (000000)
+            </button>
+          </div>
+
+          {/* Alert Messages */}
+          {pinSuccess && (
+            <div className="mb-6 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-center gap-3 animate-fade-in">
+              <Check className="w-5 h-5 text-emerald-600 shrink-0" />
+              <span className="font-medium">{pinSuccess}</span>
+            </div>
+          )}
+
+          {pinError && (
+            <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-sm flex items-center gap-3 animate-shake">
+              <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+              <span className="font-medium">{pinError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleChangePin} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600">
+                  รหัส PIN ใหม่ (ตัวเลข 6 หลัก) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={newPin}
+                  onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="เช่น 123456"
+                  required
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] text-sm text-slate-800 font-mono tracking-widest bg-white"
+                />
+                <span className="text-[11px] text-slate-400">กรอกตัวเลข 0-9 ความยาว 6 หลัก</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600">
+                  ยืนยันรหัส PIN ใหม่อีกครั้ง <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={confirmPin}
+                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="ยืนยันรหัส PIN 6 หลัก"
+                  required
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] text-sm text-slate-800 font-mono tracking-widest bg-white"
+                />
+                <span className="text-[11px] text-slate-400">ต้องตรงกับรหัส PIN ใหม่ด้านซ้าย</span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="submit"
+                disabled={isSavingPin || newPin.length !== 6 || confirmPin.length !== 6}
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-white font-medium bg-gradient-to-r from-[#0C7C82] to-[#35B4B0] hover:from-[#096368] hover:to-[#2ba09c] shadow-md shadow-[#0C7C82]/20 cursor-pointer disabled:opacity-50 transition-all text-sm"
+              >
+                {isSavingPin ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <span>กำลังบันทึก...</span>
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="w-4 h-4" />
+                    <span>บันทึกเปลี่ยนรหัส PIN</span>
                   </>
                 )}
               </button>

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserCheck, Plus, Edit2, Trash2, Download, Upload, FileSpreadsheet, Search, Filter, X } from 'lucide-react';
 import { Student, Classroom, AcademicYear } from '../../types';
 import { exportToExcel, parseExcelFile, downloadStudentTemplate } from '../../utils/excel';
+import { Pagination } from '../common/Pagination';
 
 interface StudentsViewProps {
   students: Student[];
@@ -34,6 +35,10 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Pagination states (40 items per page)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const itemsPerPage = 40;
 
   // Form fields
   const [name, setName] = useState('');
@@ -174,6 +179,16 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
     s.username.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / itemsPerPage));
+  const paginatedStudents = filteredStudents.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedClassId]);
+
   return (
     <div className="space-y-6">
       {/* Step 1: Select Class First as explicitly required by prompt */}
@@ -299,11 +314,13 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredStudents.map((s, idx) => (
+                paginatedStudents.map((s, pageIdx) => {
+                  const globalIdx = (currentPage - 1) * itemsPerPage + pageIdx;
+                  return (
                   <tr key={s.id} className="hover:bg-slate-50/50 transition-colors">
                     {/* Auto-sequence column */}
                     <td className="py-4 px-6 text-center font-bold text-slate-500 text-xs">
-                      {s.seq || idx + 1}
+                      {s.seq || globalIdx + 1}
                     </td>
                     <td className="py-4 px-6 font-bold text-slate-800">{s.name}</td>
                     <td className="py-4 px-6 text-center">
@@ -333,11 +350,20 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                       </button>
                     </td>
                   </tr>
-                ))
+                );})
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls (40 items per page) */}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredStudents.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* Modal */}

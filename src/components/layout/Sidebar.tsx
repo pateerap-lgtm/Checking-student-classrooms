@@ -11,6 +11,8 @@ import {
   ClipboardCheck,
   FileText,
   UserCheck,
+  CalendarDays,
+  CalendarRange,
   LogOut,
   X,
   School,
@@ -53,6 +55,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'subjects', label: 'จัดการรายวิชา', icon: BookOpen, color: 'text-[#4A2C6D]' },
     { id: 'assignments', label: 'มอบหมายชั้นเรียนที่สอน', icon: CalendarCheck, color: 'text-[#F57C00]' },
     { id: 'report', label: 'รายงานการเช็คชื่อ', icon: FileText, color: 'text-[#26A69A]' },
+    { id: 'daily-report', label: 'รายงานรายวัน', icon: CalendarDays, color: 'text-[#0288D1]' },
+    { id: 'monthly-report', label: 'รายงานรายเดือน', icon: CalendarRange, color: 'text-[#8E24AA]' },
+  ];
+
+  const directorMenuItems = [
+    { id: 'dashboard', label: 'แดชบอร์ด', icon: LayoutDashboard, color: 'text-[#0C7C82]' },
+    { id: 'report', label: 'รายงานการเช็คชื่อ', icon: FileText, color: 'text-[#26A69A]' },
+    { id: 'daily-report', label: 'รายงานรายวัน', icon: CalendarDays, color: 'text-[#0288D1]' },
+    { id: 'monthly-report', label: 'รายงานรายเดือน', icon: CalendarRange, color: 'text-[#8E24AA]' },
   ];
 
   const teacherMenuItems = [
@@ -63,11 +74,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const studentMenuItems = [
-    { id: 'dashboard', label: 'ข้อมูลนักเรียน', icon: LayoutDashboard, color: 'text-[#0C7C82]' },
+    { id: 'dashboard', label: 'แดชบอร์ด', icon: LayoutDashboard, color: 'text-[#0C7C82]' },
+    { id: 'student-info', label: 'ข้อมูลนักเรียน', icon: UserCheck, color: 'text-[#0288D1]' },
+    { id: 'daily-attendance', label: 'เข้าเรียนรายวัน', icon: CalendarDays, color: 'text-[#26A69A]' },
+    { id: 'monthly-attendance', label: 'เข้าเรียนรายเดือน', icon: CalendarRange, color: 'text-[#8E24AA]' },
   ];
 
-  const menuItems = role === 'admin' || role === 'director'
+  const menuItems = role === 'admin'
     ? adminMenuItems
+    : role === 'director'
+    ? directorMenuItems
     : role === 'teacher'
     ? teacherMenuItems
     : studentMenuItems;

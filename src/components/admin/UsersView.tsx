@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Users, Plus, Edit2, Trash2, Download, Upload, FileSpreadsheet, KeyRound, Shield, Search, X } from 'lucide-react';
 import { AppUser, UserRole } from '../../types';
 import { exportToExcel, parseExcelFile, downloadUserTemplate } from '../../utils/excel';
+import { Pagination } from '../common/Pagination';
 
 interface UsersViewProps {
   users: AppUser[];
@@ -27,6 +28,10 @@ export const UsersView: React.FC<UsersViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Pagination states (40 items per page)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const itemsPerPage = 40;
 
   // Form fields
   const [username, setUsername] = useState('');
@@ -154,6 +159,16 @@ export const UsersView: React.FC<UsersViewProps> = ({
     u.username.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / itemsPerPage));
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
   const getRoleBadge = (r: 'admin' | 'director' | 'teacher') => {
     switch (r) {
       case 'admin':
@@ -260,10 +275,12 @@ export const UsersView: React.FC<UsersViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((u, idx) => (
+                paginatedUsers.map((u, pageIdx) => {
+                  const globalIdx = (currentPage - 1) * itemsPerPage + pageIdx;
+                  return (
                   <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="py-4 px-6 text-center text-xs text-slate-400 font-bold">
-                      {idx + 1}
+                      {globalIdx + 1}
                     </td>
                     <td className="py-4 px-6 font-bold text-slate-800">{u.fullName}</td>
                     <td className="py-4 px-6 font-mono text-slate-600 text-xs bg-slate-50/50 px-2 rounded-sm inline-block my-3">
@@ -288,11 +305,20 @@ export const UsersView: React.FC<UsersViewProps> = ({
                       </button>
                     </td>
                   </tr>
-                ))
+                );})
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls (40 items per page) */}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredUsers.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* Modal */}

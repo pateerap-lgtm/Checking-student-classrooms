@@ -18,7 +18,10 @@ import {
   ClipboardCheck,
   AlertCircle,
   School,
-  CalendarRange
+  CalendarRange,
+  CalendarDays,
+  FileText,
+  LayoutDashboard
 } from 'lucide-react';
 import { Chart, registerables } from 'chart.js';
 import {
@@ -47,6 +50,7 @@ interface AdminDashboardProps {
   onNavigateTab: (tabId: string) => void;
   academicYears?: AcademicYear[];
   activeYear?: AcademicYear;
+  currentUserRole?: string;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -57,7 +61,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   attendanceLogs,
   onNavigateTab,
   academicYears = [],
-  activeYear
+  activeYear,
+  currentUserRole = 'admin'
 }) => {
   const subjectChartRef = useRef<HTMLCanvasElement | null>(null);
   const attendanceChartRef = useRef<HTMLCanvasElement | null>(null);
@@ -344,87 +349,131 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <span className="text-[11px] text-slate-400">iOS Style</span>
         </div>
 
-        <div className="grid grid-cols-4 gap-3 text-center">
-          <button
-            onClick={() => onNavigateTab('classes')}
-            className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
-          >
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#0C7C82] to-[#35B4B0] p-3 text-white shadow-lg flex items-center justify-center">
-              <GraduationCap className="w-6 h-6" />
-            </div>
-            <span className="text-[11px] text-slate-200 truncate w-full font-medium">ชั้นเรียน</span>
-          </button>
+        {currentUserRole === 'director' ? (
+          <div className="grid grid-cols-4 gap-3 text-center">
+            <button
+              onClick={() => onNavigateTab('dashboard')}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
+            >
+              <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#0C7C82] to-[#35B4B0] p-3 text-white shadow-lg flex items-center justify-center">
+                <LayoutDashboard className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] text-slate-200 truncate w-full font-medium">แดชบอร์ด</span>
+            </button>
 
-          <button
-            onClick={() => onNavigateTab('subjects')}
-            className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
-          >
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#26A69A] to-[#80CBC4] p-3 text-white shadow-lg flex items-center justify-center">
-              <BookOpen className="w-6 h-6" />
-            </div>
-            <span className="text-[11px] text-slate-200 truncate w-full font-medium">รายวิชา</span>
-          </button>
+            <button
+              onClick={() => onNavigateTab('report')}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
+            >
+              <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#26A69A] to-[#80CBC4] p-3 text-white shadow-lg flex items-center justify-center">
+                <FileText className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] text-slate-200 truncate w-full font-medium">รายงานเช็คชื่อ</span>
+            </button>
 
-          <button
-            onClick={() => onNavigateTab('students')}
-            className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
-          >
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#0288D1] to-[#4FC3F7] p-3 text-white shadow-lg flex items-center justify-center">
-              <UserCheck className="w-6 h-6" />
-            </div>
-            <span className="text-[11px] text-slate-200 truncate w-full font-medium">นักเรียน</span>
-          </button>
+            <button
+              onClick={() => onNavigateTab('daily-report')}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
+            >
+              <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#0288D1] to-[#4FC3F7] p-3 text-white shadow-lg flex items-center justify-center">
+                <CalendarDays className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] text-slate-200 truncate w-full font-medium">รายงานรายวัน</span>
+            </button>
 
-          <button
-            onClick={() => onNavigateTab('assignments')}
-            className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
-          >
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#F57C00] to-[#FFB74D] p-3 text-white shadow-lg flex items-center justify-center">
-              <CalendarCheck className="w-6 h-6" />
-            </div>
-            <span className="text-[11px] text-slate-200 truncate w-full font-medium">มอบหมาย</span>
-          </button>
+            <button
+              onClick={() => onNavigateTab('monthly-report')}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
+            >
+              <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#8E24AA] to-[#BA68C8] p-3 text-white shadow-lg flex items-center justify-center">
+                <CalendarRange className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] text-slate-200 truncate w-full font-medium">รายงานรายเดือน</span>
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 gap-3 text-center">
+            <button
+              onClick={() => onNavigateTab('classes')}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
+            >
+              <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#0C7C82] to-[#35B4B0] p-3 text-white shadow-lg flex items-center justify-center">
+                <GraduationCap className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] text-slate-200 truncate w-full font-medium">ชั้นเรียน</span>
+            </button>
 
-          <button
-            onClick={() => onNavigateTab('periods')}
-            className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
-          >
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#4A2C6D] to-[#9575CD] p-3 text-white shadow-lg flex items-center justify-center">
-              <Clock className="w-6 h-6" />
-            </div>
-            <span className="text-[11px] text-slate-200 truncate w-full font-medium">คาบสอน</span>
-          </button>
+            <button
+              onClick={() => onNavigateTab('subjects')}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
+            >
+              <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#26A69A] to-[#80CBC4] p-3 text-white shadow-lg flex items-center justify-center">
+                <BookOpen className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] text-slate-200 truncate w-full font-medium">รายวิชา</span>
+            </button>
 
-          <button
-            onClick={() => onNavigateTab('years')}
-            className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
-          >
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#AED581] to-[#7CB342] p-3 text-white shadow-lg flex items-center justify-center">
-              <Calendar className="w-6 h-6" />
-            </div>
-            <span className="text-[11px] text-slate-200 truncate w-full font-medium">ปีการศึกษา</span>
-          </button>
+            <button
+              onClick={() => onNavigateTab('students')}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
+            >
+              <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#0288D1] to-[#4FC3F7] p-3 text-white shadow-lg flex items-center justify-center">
+                <UserCheck className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] text-slate-200 truncate w-full font-medium">นักเรียน</span>
+            </button>
 
-          <button
-            onClick={() => onNavigateTab('users')}
-            className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
-          >
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#FF8A65] to-[#FF7043] p-3 text-white shadow-lg flex items-center justify-center">
-              <Users className="w-6 h-6" />
-            </div>
-            <span className="text-[11px] text-slate-200 truncate w-full font-medium">ผู้ใช้งาน</span>
-          </button>
+            <button
+              onClick={() => onNavigateTab('assignments')}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
+            >
+              <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#F57C00] to-[#FFB74D] p-3 text-white shadow-lg flex items-center justify-center">
+                <CalendarCheck className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] text-slate-200 truncate w-full font-medium">มอบหมาย</span>
+            </button>
 
-          <button
-            onClick={() => onNavigateTab('settings')}
-            className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
-          >
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#607D8B] to-[#90A4AE] p-3 text-white shadow-lg flex items-center justify-center">
-              <Settings className="w-6 h-6" />
-            </div>
-            <span className="text-[11px] text-slate-200 truncate w-full font-medium">ตั้งค่า</span>
-          </button>
-        </div>
+            <button
+              onClick={() => onNavigateTab('periods')}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
+            >
+              <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#4A2C6D] to-[#9575CD] p-3 text-white shadow-lg flex items-center justify-center">
+                <Clock className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] text-slate-200 truncate w-full font-medium">คาบสอน</span>
+            </button>
+
+            <button
+              onClick={() => onNavigateTab('years')}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
+            >
+              <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#AED581] to-[#7CB342] p-3 text-white shadow-lg flex items-center justify-center">
+                <Calendar className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] text-slate-200 truncate w-full font-medium">ปีการศึกษา</span>
+            </button>
+
+            <button
+              onClick={() => onNavigateTab('users')}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
+            >
+              <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#FF8A65] to-[#FF7043] p-3 text-white shadow-lg flex items-center justify-center">
+                <Users className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] text-slate-200 truncate w-full font-medium">ผู้ใช้งาน</span>
+            </button>
+
+            <button
+              onClick={() => onNavigateTab('settings')}
+              className="flex flex-col items-center gap-1.5 group cursor-pointer active:scale-95 transition-transform"
+            >
+              <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#607D8B] to-[#90A4AE] p-3 text-white shadow-lg flex items-center justify-center">
+                <Settings className="w-6 h-6" />
+              </div>
+              <span className="text-[11px] text-slate-200 truncate w-full font-medium">ตั้งค่า</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Top Overview Cards */}
@@ -467,12 +516,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <CheckCircle2 className="w-3.5 h-3.5 text-[#35B4B0]" />
               <span>ห้องเรียนทั้งหมดในระบบ</span>
             </div>
-            <button
-              onClick={() => onNavigateTab('classes')}
-              className="text-[#0C7C82] hover:underline font-medium text-xs cursor-pointer"
-            >
-              จัดการชั้นเรียน
-            </button>
+            {currentUserRole === 'director' ? (
+              <button
+                onClick={() => onNavigateTab('report')}
+                className="text-[#0C7C82] hover:underline font-medium text-xs cursor-pointer"
+              >
+                ดูรายงานการเช็คชื่อ
+              </button>
+            ) : (
+              <button
+                onClick={() => onNavigateTab('classes')}
+                className="text-[#0C7C82] hover:underline font-medium text-xs cursor-pointer"
+              >
+                จัดการชั้นเรียน
+              </button>
+            )}
           </div>
         </div>
 
@@ -750,13 +808,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <p className="text-xs text-slate-500 max-w-md mx-auto mb-4">
               เมื่อครูผู้สอนบันทึกการเช็คชื่อนักเรียนในรายวิชา ระบบจะสรุปและแสดงกราฟวิเคราะห์ภาพรวมการมาเรียนทั้งโรงเรียนอัตโนมัติ
             </p>
-            <button
-              onClick={() => onNavigateTab('attendance')}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0C7C82] hover:bg-[#096368] text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
-            >
-              <ClipboardCheck className="w-4 h-4" />
-              <span>ไปที่หน้าบันทึกการเช็คชื่อ</span>
-            </button>
+            {currentUserRole === 'director' ? (
+              <button
+                onClick={() => onNavigateTab('report')}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0C7C82] hover:bg-[#096368] text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                <ClipboardCheck className="w-4 h-4" />
+                <span>ไปที่หน้ารายงานการเช็คชื่อ</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => onNavigateTab('attendance')}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0C7C82] hover:bg-[#096368] text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                <ClipboardCheck className="w-4 h-4" />
+                <span>ไปที่หน้าบันทึกการเช็คชื่อ</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className={`grid gap-6 ${chartType === 'both' ? 'grid-cols-1 lg:grid-cols-12' : 'grid-cols-1'}`}>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   collection,
   doc,
@@ -39,6 +39,7 @@ import {
   UserRole
 } from './types';
 import { LoginPage } from './components/auth/LoginPage';
+import { AdminPinModal, FloatingAdminLoginButton } from './components/auth/AdminPinModal';
 import { Sidebar } from './components/layout/Sidebar';
 import { MobileNavBar } from './components/layout/MobileNavBar';
 import { Footer } from './components/layout/Footer';
@@ -62,8 +63,15 @@ import { TeacherAttendanceView } from './components/teacher/TeacherAttendanceVie
 import { TeacherReportView } from './components/teacher/TeacherReportView';
 import { TeacherProfileView } from './components/teacher/TeacherProfileView';
 
-// Student View
-import { StudentDashboard } from './components/student/StudentDashboard';
+// Director Views
+import { DirectorDailyReportView } from './components/director/DirectorDailyReportView';
+import { DirectorMonthlyReportView } from './components/director/DirectorMonthlyReportView';
+
+// Student Views
+import { StudentDashboardView } from './components/student/StudentDashboardView';
+import { StudentInfoView } from './components/student/StudentInfoView';
+import { StudentDailyAttendanceView } from './components/student/StudentDailyAttendanceView';
+import { StudentMonthlyAttendanceView } from './components/student/StudentMonthlyAttendanceView';
 
 import { Menu, LogOut, School, Sparkles, User, Bell } from 'lucide-react';
 
@@ -153,8 +161,53 @@ export default function App() {
     });
   };
 
-  // Active Academic Year
-  const activeYear = academicYears.find((y) => y.isCurrent) || academicYears[0];
+  // Admin PIN Login Modal state
+  const [isAdminPinModalOpen, setIsAdminPinModalOpen] = useState(false);
+
+  // Active Academic Year with selector support
+  const [selectedYearId, setSelectedYearId] = useState<string>('');
+  const activeYear = (selectedYearId ? academicYears.find((y) => y.id === selectedYearId) : null)
+    || academicYears.find((y) => y.isCurrent)
+    || academicYears[0];
+
+  const activeYearId = activeYear?.id || 'year_2569';
+
+  // Filter all system data collections strictly according to active academic year
+  const currentYearClasses = useMemo(() => {
+    return classes.filter(
+      (c) => c.academicYearId === activeYearId || (!c.academicYearId && (activeYear?.isCurrent || activeYearId === 'year_2569'))
+    );
+  }, [classes, activeYearId, activeYear]);
+
+  const currentYearStudents = useMemo(() => {
+    return students.filter(
+      (s) => s.academicYearId === activeYearId || (!s.academicYearId && (activeYear?.isCurrent || activeYearId === 'year_2569'))
+    );
+  }, [students, activeYearId, activeYear]);
+
+  const currentYearSubjects = useMemo(() => {
+    return subjects.filter(
+      (s) => s.academicYearId === activeYearId || (!s.academicYearId && (activeYear?.isCurrent || activeYearId === 'year_2569'))
+    );
+  }, [subjects, activeYearId, activeYear]);
+
+  const currentYearAssignments = useMemo(() => {
+    return assignments.filter(
+      (a) => a.academicYearId === activeYearId || (!a.academicYearId && (activeYear?.isCurrent || activeYearId === 'year_2569'))
+    );
+  }, [assignments, activeYearId, activeYear]);
+
+  const currentYearPeriods = useMemo(() => {
+    return periods.filter(
+      (p) => !p.academicYearId || p.academicYearId === activeYearId || (activeYear?.isCurrent || activeYearId === 'year_2569')
+    );
+  }, [periods, activeYearId, activeYear]);
+
+  const currentYearAttendanceLogs = useMemo(() => {
+    return attendanceLogs.filter(
+      (l) => l.academicYearId === activeYearId || (!l.academicYearId && (activeYear?.isCurrent || activeYearId === 'year_2569'))
+    );
+  }, [attendanceLogs, activeYearId, activeYear]);
 
   // Initialize and attach Firestore real-time listeners
   useEffect(() => {
@@ -247,6 +300,16 @@ export default function App() {
     };
   }, []);
 
+  // Guard tab for director: dashboard, report, daily-report, monthly-report are accessible
+  useEffect(() => {
+    if (currentUser?.role === 'director') {
+      const allowedDirectorTabs = ['dashboard', 'report', 'daily-report', 'monthly-report'];
+      if (!allowedDirectorTabs.includes(currentTab)) {
+        setCurrentTab('dashboard');
+      }
+    }
+  }, [currentUser, currentTab]);
+
   // Login handler
   const handleLoginSuccess = (userObj: { username: string; fullName: string; role: UserRole; data?: any }) => {
     setCurrentUser(userObj);
@@ -338,7 +401,10 @@ export default function App() {
   // Classes mutations
   const handleAddClass = async (newClass: Omit<Classroom, 'id'>) => {
     const id = `c_${Date.now()}`;
-    await setDoc(doc(db, 'classes', id), newClass);
+    await setDoc(doc(db, 'classes', id), {
+      ...newClass,
+      academicYearId: newClass.academicYearId || activeYear?.id || 'year_2569'
+    });
     showToast('success', `เพิ่มชั้นเรียน ${newClass.name} สำเร็จ`);
   };
 
@@ -405,7 +471,10 @@ export default function App() {
     const batch = writeBatch(db);
     newClasses.forEach((c, idx) => {
       const id = `c_imp_${Date.now()}_${idx}`;
-      batch.set(doc(db, 'classes', id), c);
+      batch.set(doc(db, 'classes', id), {
+        ...c,
+        academicYearId: c.academicYearId || activeYear?.id || 'year_2569'
+      });
     });
     await batch.commit();
   };
@@ -446,7 +515,10 @@ export default function App() {
   // Students mutations
   const handleAddStudent = async (newStudent: Omit<Student, 'id'>) => {
     const id = `s_${Date.now()}`;
-    await setDoc(doc(db, 'students', id), newStudent);
+    await setDoc(doc(db, 'students', id), {
+      ...newStudent,
+      academicYearId: newStudent.academicYearId || activeYear?.id || 'year_2569'
+    });
     showToast('success', `เพิ่มนักเรียน ${newStudent.name} สำเร็จ`);
   };
 
@@ -472,7 +544,10 @@ export default function App() {
     const batch = writeBatch(db);
     newStudents.forEach((s, idx) => {
       const id = `s_imp_${Date.now()}_${idx}`;
-      batch.set(doc(db, 'students', id), s);
+      batch.set(doc(db, 'students', id), {
+        ...s,
+        academicYearId: s.academicYearId || activeYear?.id || 'year_2569'
+      });
     });
     await batch.commit();
   };
@@ -480,7 +555,10 @@ export default function App() {
   // Subjects mutations
   const handleAddSubject = async (newSubject: Omit<Subject, 'id'>) => {
     const id = `sub_${Date.now()}`;
-    await setDoc(doc(db, 'subjects', id), newSubject);
+    await setDoc(doc(db, 'subjects', id), {
+      ...newSubject,
+      academicYearId: newSubject.academicYearId || activeYear?.id || 'year_2569'
+    });
     showToast('success', `เพิ่มรายวิชา ${newSubject.code} ${newSubject.name} สำเร็จ`);
   };
 
@@ -505,7 +583,10 @@ export default function App() {
     const batch = writeBatch(db);
     newSubjects.forEach((s, idx) => {
       const id = `sub_imp_${Date.now()}_${idx}`;
-      batch.set(doc(db, 'subjects', id), s);
+      batch.set(doc(db, 'subjects', id), {
+        ...s,
+        academicYearId: s.academicYearId || activeYear?.id || 'year_2569'
+      });
     });
     await batch.commit();
   };
@@ -513,7 +594,10 @@ export default function App() {
   // Assignments mutations
   const handleAddAssignment = async (newAssignment: Omit<TeachingAssignment, 'id'>) => {
     const id = `a_${Date.now()}`;
-    await setDoc(doc(db, 'assignments', id), newAssignment);
+    await setDoc(doc(db, 'assignments', id), {
+      ...newAssignment,
+      academicYearId: newAssignment.academicYearId || activeYear?.id || 'year_2569'
+    });
     showToast('success', 'มอบหมายการสอนสำเร็จ');
   };
 
@@ -595,16 +679,25 @@ export default function App() {
     }
   };
 
-  // If not logged in, render LoginPage
+  // If not logged in, render LoginPage with floating Admin PIN button
   if (!currentUser) {
     return (
-      <div className="font-['Sarabun',sans-serif]">
+      <div className="font-['Sarabun',sans-serif] relative min-h-screen flex flex-col justify-between">
         <LoginPage
           settings={settings}
           users={users}
           students={students}
+          currentAcademicYear={activeYear}
           onLoginSuccess={handleLoginSuccess}
           isLoadingData={isLoading}
+        />
+        {/* Floating Admin PIN button at bottom-right corner as required */}
+        <FloatingAdminLoginButton onClick={() => setIsAdminPinModalOpen(true)} />
+        <AdminPinModal
+          isOpen={isAdminPinModalOpen}
+          onClose={() => setIsAdminPinModalOpen(false)}
+          expectedPin={settings.adminPin || '000000'}
+          onLoginSuccess={handleLoginSuccess}
         />
         <Footer schoolName={settings.schoolName} />
         <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
@@ -669,10 +762,22 @@ export default function App() {
 
           {/* Right Header items: Active Academic Year, User Info, Logout */}
           <div className="flex items-center gap-3">
-            {/* Active Academic Year pill */}
-            <div className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-50 border border-teal-100 text-teal-800 text-xs font-semibold">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>ปีการศึกษา {activeYear?.name || '2569'}</span>
+            {/* Active Academic Year selector */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-50 border border-teal-200 text-teal-900 text-xs font-semibold shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+              <span className="text-teal-700 hidden sm:inline">ปีการศึกษา:</span>
+              <select
+                value={activeYear?.id || ''}
+                onChange={(e) => setSelectedYearId(e.target.value)}
+                className="bg-transparent text-teal-900 font-bold focus:outline-hidden cursor-pointer"
+                title="เลือกปีการศึกษาเพื่อดูและจัดการข้อมูล"
+              >
+                {academicYears.map((y) => (
+                  <option key={y.id} value={y.id} className="text-slate-800">
+                    {y.name} {y.isCurrent ? '(ปีปัจจุบัน)' : ''}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* User Info Chip */}
@@ -732,19 +837,100 @@ export default function App() {
             </div>
           ) : (
             <>
-              {/* Admin Views */}
-              {(currentUser.role === 'admin' || currentUser.role === 'director') && (
+              {/* Director Views (Only Dashboard and Report as requested) */}
+              {currentUser.role === 'director' && (
                 <>
                   {currentTab === 'dashboard' && (
                     <AdminDashboard
-                      subjects={subjects}
-                      classes={classes}
-                      students={students}
+                      subjects={currentYearSubjects}
+                      classes={currentYearClasses}
+                      students={currentYearStudents}
                       users={users}
-                      attendanceLogs={attendanceLogs}
+                      attendanceLogs={currentYearAttendanceLogs}
+                      onNavigateTab={(tab) => {
+                        if (tab === 'report' || tab === 'dashboard' || tab === 'daily-report' || tab === 'monthly-report') {
+                          setCurrentTab(tab);
+                        } else {
+                          setCurrentTab('report');
+                        }
+                      }}
+                      academicYears={academicYears}
+                      activeYear={activeYear}
+                      currentUserRole="director"
+                    />
+                  )}
+                  {currentTab === 'report' && (
+                    <TeacherReportView
+                      attendanceLogs={currentYearAttendanceLogs}
+                      assignments={currentYearAssignments}
+                      allAttendanceLogs={currentYearAttendanceLogs}
+                      allAssignments={currentYearAssignments}
+                      classes={currentYearClasses}
+                      subjects={currentYearSubjects}
+                      students={currentYearStudents}
+                      teachers={users.filter((u) => u.role === 'teacher')}
+                      allUsers={users}
+                      periods={currentYearPeriods}
+                      settings={settings}
+                      teacherUsername={currentUser.username}
+                      teacherFullName={currentUser.fullName}
+                      currentUserRole={currentUser.role}
+                      activeYear={activeYear}
+                      initialStudentId={pendingReportStudent?.studentId}
+                      initialClassId={pendingReportStudent?.classId}
+                      onClearInitialStudent={() => setPendingReportStudent(null)}
+                      onUpdateAttendance={handleUpdateAttendance}
+                      onSaveAttendance={handleSaveAttendance}
+                      onNavigateTab={setCurrentTab}
+                      onSelectAssignmentForAttendance={(assignment) => {
+                        setPendingAttendanceAssignment(assignment);
+                        setCurrentTab('attendance');
+                      }}
+                    />
+                  )}
+                  {currentTab === 'daily-report' && (
+                    <DirectorDailyReportView
+                      classes={currentYearClasses}
+                      subjects={currentYearSubjects}
+                      assignments={currentYearAssignments}
+                      attendanceLogs={currentYearAttendanceLogs}
+                      periods={currentYearPeriods}
+                      students={currentYearStudents}
+                      teachers={users.filter((u) => u.role === 'teacher')}
+                      allUsers={users}
+                      settings={settings}
+                      activeYear={activeYear}
+                    />
+                  )}
+                  {currentTab === 'monthly-report' && (
+                    <DirectorMonthlyReportView
+                      classes={currentYearClasses}
+                      subjects={currentYearSubjects}
+                      attendanceLogs={currentYearAttendanceLogs}
+                      students={currentYearStudents}
+                      teachers={users.filter((u) => u.role === 'teacher')}
+                      allUsers={users}
+                      settings={settings}
+                      activeYear={activeYear}
+                    />
+                  )}
+                </>
+              )}
+
+              {/* Admin Views */}
+              {currentUser.role === 'admin' && (
+                <>
+                  {currentTab === 'dashboard' && (
+                    <AdminDashboard
+                      subjects={currentYearSubjects}
+                      classes={currentYearClasses}
+                      students={currentYearStudents}
+                      users={users}
+                      attendanceLogs={currentYearAttendanceLogs}
                       onNavigateTab={setCurrentTab}
                       academicYears={academicYears}
                       activeYear={activeYear}
+                      currentUserRole="admin"
                     />
                   )}
                   {currentTab === 'settings' && (
@@ -766,7 +952,7 @@ export default function App() {
                   )}
                   {currentTab === 'periods' && (
                     <PeriodsView
-                      periods={periods}
+                      periods={currentYearPeriods}
                       activeYear={activeYear}
                       onAddPeriod={handleAddPeriod}
                       onUpdatePeriod={handleUpdatePeriod}
@@ -779,7 +965,7 @@ export default function App() {
                   )}
                   {currentTab === 'classes' && (
                     <ClassesView
-                      classes={classes}
+                      classes={currentYearClasses}
                       activeYear={activeYear}
                       onAddClass={handleAddClass}
                       onUpdateClass={handleUpdateClass}
@@ -806,8 +992,8 @@ export default function App() {
                   )}
                   {currentTab === 'students' && (
                     <StudentsView
-                      students={students}
-                      classes={classes}
+                      students={currentYearStudents}
+                      classes={currentYearClasses}
                       activeYear={activeYear}
                       onAddStudent={handleAddStudent}
                       onUpdateStudent={handleUpdateStudent}
@@ -820,8 +1006,8 @@ export default function App() {
                   )}
                   {currentTab === 'subjects' && (
                     <SubjectsView
-                      subjects={subjects}
-                      classes={classes}
+                      subjects={currentYearSubjects}
+                      classes={currentYearClasses}
                       activeYear={activeYear}
                       onAddSubject={handleAddSubject}
                       onUpdateSubject={handleUpdateSubject}
@@ -834,11 +1020,11 @@ export default function App() {
                   )}
                   {currentTab === 'assignments' && (
                     <AssignmentsView
-                      assignments={assignments}
+                      assignments={currentYearAssignments}
                       teachers={users.filter((u) => u.role === 'teacher')}
-                      classes={classes}
-                      subjects={subjects}
-                      periods={periods}
+                      classes={currentYearClasses}
+                      subjects={currentYearSubjects}
+                      periods={currentYearPeriods}
                       activeYear={activeYear}
                       systemSettings={settings}
                       onAddAssignment={handleAddAssignment}
@@ -851,16 +1037,16 @@ export default function App() {
                   )}
                   {currentTab === 'report' && (
                     <TeacherReportView
-                      attendanceLogs={attendanceLogs}
-                      assignments={assignments}
-                      allAttendanceLogs={attendanceLogs}
-                      allAssignments={assignments}
-                      classes={classes}
-                      subjects={subjects}
-                      students={students}
+                      attendanceLogs={currentYearAttendanceLogs}
+                      assignments={currentYearAssignments}
+                      allAttendanceLogs={currentYearAttendanceLogs}
+                      allAssignments={currentYearAssignments}
+                      classes={currentYearClasses}
+                      subjects={currentYearSubjects}
+                      students={currentYearStudents}
                       teachers={users.filter((u) => u.role === 'teacher')}
                       allUsers={users}
-                      periods={periods}
+                      periods={currentYearPeriods}
                       settings={settings}
                       teacherUsername={currentUser.username}
                       teacherFullName={currentUser.fullName}
@@ -878,6 +1064,32 @@ export default function App() {
                       }}
                     />
                   )}
+                  {currentTab === 'daily-report' && (
+                    <DirectorDailyReportView
+                      classes={currentYearClasses}
+                      subjects={currentYearSubjects}
+                      assignments={currentYearAssignments}
+                      attendanceLogs={currentYearAttendanceLogs}
+                      periods={currentYearPeriods}
+                      students={currentYearStudents}
+                      teachers={users.filter((u) => u.role === 'teacher')}
+                      allUsers={users}
+                      settings={settings}
+                      activeYear={activeYear}
+                    />
+                  )}
+                  {currentTab === 'monthly-report' && (
+                    <DirectorMonthlyReportView
+                      classes={currentYearClasses}
+                      subjects={currentYearSubjects}
+                      attendanceLogs={currentYearAttendanceLogs}
+                      students={currentYearStudents}
+                      teachers={users.filter((u) => u.role === 'teacher')}
+                      allUsers={users}
+                      settings={settings}
+                      activeYear={activeYear}
+                    />
+                  )}
                 </>
               )}
 
@@ -888,12 +1100,12 @@ export default function App() {
                     <TeacherDashboard
                       teacherUsername={currentUser.username}
                       teacherFullName={currentUser.fullName}
-                      assignments={assignments}
-                      periods={periods}
-                      classes={classes}
-                      subjects={subjects}
-                      students={students}
-                      attendanceLogs={attendanceLogs}
+                      assignments={currentYearAssignments}
+                      periods={currentYearPeriods}
+                      classes={currentYearClasses}
+                      subjects={currentYearSubjects}
+                      students={currentYearStudents}
+                      attendanceLogs={currentYearAttendanceLogs}
                       activeYear={activeYear}
                       onNavigateTab={setCurrentTab}
                       onSelectAssignmentForAttendance={(assignment) => {
@@ -910,12 +1122,12 @@ export default function App() {
                     <TeacherAttendanceView
                       teacherUsername={currentUser.username}
                       teacherFullName={currentUser.fullName}
-                      assignments={assignments}
-                      periods={periods}
-                      classes={classes}
-                      subjects={subjects}
-                      students={students}
-                      attendanceLogs={attendanceLogs}
+                      assignments={currentYearAssignments}
+                      periods={currentYearPeriods}
+                      classes={currentYearClasses}
+                      subjects={currentYearSubjects}
+                      students={currentYearStudents}
+                      attendanceLogs={currentYearAttendanceLogs}
                       activeYear={activeYear}
                       pendingAssignment={pendingAttendanceAssignment}
                       onClearPendingAssignment={() => setPendingAttendanceAssignment(null)}
@@ -928,16 +1140,16 @@ export default function App() {
                   )}
                   {currentTab === 'report' && (
                     <TeacherReportView
-                      attendanceLogs={attendanceLogs}
-                      assignments={assignments}
-                      allAttendanceLogs={attendanceLogs}
-                      allAssignments={assignments}
-                      classes={classes}
-                      subjects={subjects}
-                      students={students}
+                      attendanceLogs={currentYearAttendanceLogs}
+                      assignments={currentYearAssignments}
+                      allAttendanceLogs={currentYearAttendanceLogs}
+                      allAssignments={currentYearAssignments}
+                      classes={currentYearClasses}
+                      subjects={currentYearSubjects}
+                      students={currentYearStudents}
                       teachers={users.filter((u) => u.role === 'teacher')}
                       allUsers={users}
-                      periods={periods}
+                      periods={currentYearPeriods}
                       settings={settings}
                       teacherUsername={currentUser.username}
                       teacherFullName={currentUser.fullName}
@@ -967,10 +1179,52 @@ export default function App() {
 
               {/* Student Views */}
               {currentUser.role === 'student' && (
-                <StudentDashboard
-                  currentStudent={studentUser}
-                  attendanceLogs={attendanceLogs}
-                />
+                <>
+                  {(currentTab === 'dashboard' || !['student-info', 'daily-attendance', 'monthly-attendance'].includes(currentTab)) && (
+                    <StudentDashboardView
+                      currentStudent={studentUser}
+                      attendanceLogs={currentYearAttendanceLogs}
+                      subjects={currentYearSubjects}
+                      classes={currentYearClasses}
+                      teachers={users.filter((u) => u.role === 'teacher')}
+                      activeYear={activeYear}
+                      settings={settings}
+                      onNavigateTab={setCurrentTab}
+                    />
+                  )}
+                  {currentTab === 'student-info' && (
+                    <StudentInfoView
+                      currentStudent={studentUser}
+                      classes={currentYearClasses}
+                      subjects={currentYearSubjects}
+                      teachers={users.filter((u) => u.role === 'teacher')}
+                      activeYear={activeYear}
+                      settings={settings}
+                    />
+                  )}
+                  {currentTab === 'daily-attendance' && (
+                    <StudentDailyAttendanceView
+                      currentStudent={studentUser}
+                      attendanceLogs={currentYearAttendanceLogs}
+                      subjects={currentYearSubjects}
+                      periods={currentYearPeriods}
+                      classes={currentYearClasses}
+                      activeYear={activeYear}
+                      settings={settings}
+                    />
+                  )}
+                  {currentTab === 'monthly-attendance' && (
+                    <StudentMonthlyAttendanceView
+                      currentStudent={studentUser}
+                      attendanceLogs={currentYearAttendanceLogs}
+                      subjects={currentYearSubjects}
+                      classes={currentYearClasses}
+                      teachers={users.filter((u) => u.role === 'teacher')}
+                      activeYear={activeYear}
+                      settings={settings}
+                    />
+                  )}
+                </>
               )}
             </>
           )}

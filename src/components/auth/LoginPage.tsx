@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { School, Lock, User, ArrowRight, ShieldCheck, CheckCircle2, Sparkles, BookOpen } from 'lucide-react';
-import { SystemSettings, AppUser, Student, UserRole } from '../../types';
+import { School, Lock, User, ArrowRight, ShieldCheck, CheckCircle2, Sparkles, BookOpen, Calendar } from 'lucide-react';
+import { SystemSettings, AppUser, Student, UserRole, AcademicYear } from '../../types';
 
 interface LoginPageProps {
   settings: SystemSettings;
   users: AppUser[];
   students: Student[];
+  currentAcademicYear?: AcademicYear | null;
   onLoginSuccess: (user: { username: string; fullName: string; role: UserRole; data?: any }) => void;
   isLoadingData: boolean;
 }
@@ -14,6 +15,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   settings,
   users,
   students,
+  currentAcademicYear,
   onLoginSuccess,
   isLoadingData
 }) => {
@@ -98,15 +100,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               )}
             </div>
 
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-white text-xs font-medium backdrop-blur-xs mb-3">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>ระบบเช็คชื่อนักเรียนสำหรับรายวิชา</span>
-            </div>
+            {currentAcademicYear && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-900/40 border border-teal-300/30 text-teal-100 text-xs font-semibold backdrop-blur-xs mb-4">
+                <Calendar className="w-3.5 h-3.5 text-teal-200" />
+                <span>ปีการศึกษา {currentAcademicYear.name}</span>
+              </div>
+            )}
 
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mb-2 leading-tight">
-              {settings.schoolName || 'โรงเรียนอนุบาลศรีสุทโธ'}
-            </h1>
-            <p className="text-sm text-teal-100 leading-relaxed font-light">
+            <div className="space-y-2 mb-3">
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white leading-tight">
+                ระบบเช็คชื่อนักเรียนสำหรับรายวิชา
+              </h1>
+              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-teal-100 leading-tight">
+                {settings.schoolName || 'โรงเรียนอนุบาลศรีสุทโธ'}
+              </h2>
+            </div>
+            <p className="text-sm text-teal-100/90 leading-relaxed font-light">
               {settings.affiliationName || 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษาอุดรธานี เขต 3'}
             </p>
           </div>
@@ -129,11 +138,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
         {/* Right Side: Horizontal Card Form Part */}
         <div className="md:w-7/12 p-8 sm:p-10 flex flex-col justify-center">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-slate-800 tracking-tight">เข้าสู่ระบบ</h2>
-            <p className="text-sm text-slate-500 mt-1">
-              เข้าใช้งานสำหรับผู้ดูแลระบบ, ผู้อำนวยการสถานศึกษา, ครูผู้สอน และนักเรียน
-            </p>
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-800 tracking-tight">เข้าสู่ระบบ</h2>
+              <p className="text-sm text-slate-500 mt-1">
+                เข้าใช้งานสำหรับผู้ดูแลระบบ, ผู้อำนวยการสถานศึกษา, ครูผู้สอน และนักเรียน
+              </p>
+            </div>
+            {currentAcademicYear && (
+              <div className="shrink-0 self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-50 border border-teal-200 text-[#0C7C82] text-xs font-bold shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <Calendar className="w-3.5 h-3.5 text-[#0C7C82]" />
+                <span>ปีการศึกษา {currentAcademicYear.name}</span>
+              </div>
+            )}
           </div>
 
           {error && (
