@@ -34,6 +34,8 @@ import {
   AppUser,
   Student,
   Subject,
+  Curriculum,
+  CurriculumSubject,
   TeachingAssignment,
   AttendanceLog,
   UserRole
@@ -54,6 +56,7 @@ import { PeriodsView } from './components/admin/PeriodsView';
 import { ClassesView } from './components/admin/ClassesView';
 import { UsersView } from './components/admin/UsersView';
 import { StudentsView } from './components/admin/StudentsView';
+import { CurriculumsView } from './components/admin/CurriculumsView';
 import { SubjectsView } from './components/admin/SubjectsView';
 import { AssignmentsView } from './components/admin/AssignmentsView';
 
@@ -101,6 +104,8 @@ export default function App() {
   const [users, setUsers] = useState<AppUser[]>(DEFAULT_USERS);
   const [students, setStudents] = useState<Student[]>(DEFAULT_STUDENTS);
   const [subjects, setSubjects] = useState<Subject[]>(DEFAULT_SUBJECTS);
+  const [curriculums, setCurriculums] = useState<Curriculum[]>([]);
+  const [curriculumSubjects, setCurriculumSubjects] = useState<CurriculumSubject[]>([]);
   const [assignments, setAssignments] = useState<TeachingAssignment[]>(DEFAULT_ASSIGNMENTS);
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
 
@@ -190,6 +195,18 @@ export default function App() {
     );
   }, [subjects, activeYearId, activeYear]);
 
+  const currentYearCurriculums = useMemo(() => {
+    return curriculums.filter(
+      (c) => c.academicYearId === activeYearId || (!c.academicYearId && (activeYear?.isCurrent || activeYearId === 'year_2569'))
+    );
+  }, [curriculums, activeYearId, activeYear]);
+
+  const currentYearCurriculumSubjects = useMemo(() => {
+    return curriculumSubjects.filter(
+      (cs) => cs.academicYearId === activeYearId || (!cs.academicYearId && (activeYear?.isCurrent || activeYearId === 'year_2569'))
+    );
+  }, [curriculumSubjects, activeYearId, activeYear]);
+
   const currentYearAssignments = useMemo(() => {
     return assignments.filter(
       (a) => a.academicYearId === activeYearId || (!a.academicYearId && (activeYear?.isCurrent || activeYearId === 'year_2569'))
@@ -267,6 +284,21 @@ export default function App() {
       setSubjects(list);
     }, (err) => handleFirestoreError(err, OperationType.GET, 'subjects'));
 
+    // Listen to Curriculums
+    const unsubCurriculums = onSnapshot(collection(db, 'curriculums'), (snap) => {
+      const list: Curriculum[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() } as Curriculum));
+      list.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || '') || a.name.localeCompare(b.name, 'th'));
+      setCurriculums(list);
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'curriculums'));
+
+    // Listen to Curriculum Subjects
+    const unsubCurriculumSubjects = onSnapshot(collection(db, 'curriculumSubjects'), (snap) => {
+      const list: CurriculumSubject[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() } as CurriculumSubject));
+      setCurriculumSubjects(list);
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'curriculumSubjects'));
+
     // Listen to Teaching Assignments
     const unsubAssignments = onSnapshot(collection(db, 'assignments'), (snap) => {
       const list: TeachingAssignment[] = [];
@@ -294,6 +326,8 @@ export default function App() {
       unsubUsers();
       unsubStudents();
       unsubSubjects();
+      unsubCurriculums();
+      unsubCurriculumSubjects();
       unsubAssignments();
       unsubAttendance();
     };
@@ -606,6 +640,89 @@ export default function App() {
       });
     });
     await batch.commit();
+  };
+
+  // Curriculums & Curriculum Subjects mutations
+  const handleAddCurriculum = async (newCurriculum: Omit<Curriculum, 'id'>): Promise<string> => {
+    try {
+      const id = `cur_${Date.now()}`;
+      await setDoc(doc(db, 'curriculums', id), {
+        ...newCurriculum,
+        academicYearId: newCurriculum.academicYearId || activeYear?.id || 'year_2569'
+      });
+      showToast('success', `เพิ่มหลักสูตร "${newCurriculum.name}" สำเร็จ`);
+      return id;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'curriculums');
+      showToast('error', 'เกิดข้อผิดพลาดในการเพิ่มหลักสูตร');
+      throw err;
+    }
+  };
+
+  const handleUpdateCurriculum = async (id: string, updated: Partial<Curriculum>) => {
+    try {
+      await updateDoc(doc(db, 'curriculums', id), updated);
+      showToast('success', 'แก้ไขชื่อหลักสูตรเรียบร้อยแล้ว');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `curriculums/${id}`);
+      showToast('error', 'เกิดข้อผิดพลาดในการแก้ไขหลักสูตร');
+      throw err;
+    }
+  };
+
+  const handleDeleteCurriculum = async (id: string) => {
+    try {
+      const relatedSubjects = curriculumSubjects.filter((s) => s.curriculumId === id);
+      for (let i = 0; i < relatedSubjects.length; i += 400) {
+        const chunk = relatedSubjects.slice(i, i + 400);
+        const batch = writeBatch(db);
+        chunk.forEach((s) => batch.delete(doc(db, 'curriculumSubjects', s.id)));
+        await batch.commit();
+      }
+      await deleteDoc(doc(db, 'curriculums', id));
+      showToast('success', 'ลบหลักสูตรและรายวิชาในหลักสูตรเรียบร้อยแล้ว');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `curriculums/${id}`);
+      showToast('error', 'เกิดข้อผิดพลาดในการลบหลักสูตร');
+      throw err;
+    }
+  };
+
+  const handleAddCurriculumSubject = async (newSubject: Omit<CurriculumSubject, 'id'>) => {
+    try {
+      const id = `cs_${Date.now()}`;
+      await setDoc(doc(db, 'curriculumSubjects', id), {
+        ...newSubject,
+        academicYearId: newSubject.academicYearId || activeYear?.id || 'year_2569'
+      });
+      showToast('success', `เพิ่มรายวิชา ${newSubject.code} ${newSubject.name} สำเร็จ`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'curriculumSubjects');
+      showToast('error', 'เกิดข้อผิดพลาดในการเพิ่มรายวิชา');
+      throw err;
+    }
+  };
+
+  const handleUpdateCurriculumSubject = async (id: string, updated: Partial<CurriculumSubject>) => {
+    try {
+      await updateDoc(doc(db, 'curriculumSubjects', id), updated);
+      showToast('success', 'แก้ไขรายวิชาในหลักสูตรเรียบร้อยแล้ว');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `curriculumSubjects/${id}`);
+      showToast('error', 'เกิดข้อผิดพลาดในการแก้ไขรายวิชา');
+      throw err;
+    }
+  };
+
+  const handleDeleteCurriculumSubject = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'curriculumSubjects', id));
+      showToast('success', 'ลบรายวิชาออกจากหลักสูตรเรียบร้อยแล้ว');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `curriculumSubjects/${id}`);
+      showToast('error', 'เกิดข้อผิดพลาดในการลบรายวิชา');
+      throw err;
+    }
   };
 
   // Assignments mutations
@@ -1018,6 +1135,21 @@ export default function App() {
                       onDeleteStudent={handleDeleteStudent}
                       onDeleteAllStudentsByClass={handleDeleteAllStudentsByClass}
                       onImportStudents={handleImportStudents}
+                      openConfirm={openConfirm}
+                      showToast={showToast}
+                    />
+                  )}
+                  {currentTab === 'curriculums' && (
+                    <CurriculumsView
+                      curriculums={currentYearCurriculums}
+                      curriculumSubjects={currentYearCurriculumSubjects}
+                      activeYear={activeYear}
+                      onAddCurriculum={handleAddCurriculum}
+                      onUpdateCurriculum={handleUpdateCurriculum}
+                      onDeleteCurriculum={handleDeleteCurriculum}
+                      onAddCurriculumSubject={handleAddCurriculumSubject}
+                      onUpdateCurriculumSubject={handleUpdateCurriculumSubject}
+                      onDeleteCurriculumSubject={handleDeleteCurriculumSubject}
                       openConfirm={openConfirm}
                       showToast={showToast}
                     />

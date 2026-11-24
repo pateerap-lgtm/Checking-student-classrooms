@@ -71,6 +71,22 @@ export interface Subject {
   academicYearId?: string;
 }
 
+export interface Curriculum {
+  id: string;
+  name: string;
+  academicYearId?: string;
+  createdAt?: string;
+}
+
+export interface CurriculumSubject {
+  id: string;
+  curriculumId: string;
+  code: string;
+  name: string;
+  periodsPerWeek: number;
+  academicYearId?: string;
+}
+
 export type DayOfWeek = 'จันทร์' | 'อังคาร' | 'พุธ' | 'พฤหัสบดี' | 'ศุกร์';
 
 export interface TeachingAssignment {

@@ -132,6 +132,8 @@ export async function purgeAllSampleData() {
     const collectionsToPurge = [
       'students',
       'subjects',
+      'curriculums',
+      'curriculumSubjects',
       'assignments',
       'attendance',
       'classes',

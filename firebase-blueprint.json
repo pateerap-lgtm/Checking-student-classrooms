@@ -133,6 +133,30 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["subjectId", "classId", "date", "dayOfWeek"]
+    },
+    "Curriculum": {
+      "title": "Curriculum",
+      "description": "School curriculum definition",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "academicYearId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "CurriculumSubject": {
+      "title": "CurriculumSubject",
+      "description": "Subject belonging to a curriculum",
+      "type": "object",
+      "properties": {
+        "curriculumId": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "periodsPerWeek": { "type": "number" },
+        "academicYearId": { "type": "string" }
+      },
+      "required": ["curriculumId", "code", "name", "periodsPerWeek"]
     }
   },
   "firestore": {
@@ -171,6 +195,14 @@
     "/attendance/{attendanceId}": {
       "schema": "AttendanceLog",
       "description": "Student attendance logs"
+    },
+    "/curriculums/{curriculumId}": {
+      "schema": "Curriculum",
+      "description": "School curriculums"
+    },
+    "/curriculumSubjects/{curriculumSubjectId}": {
+      "schema": "CurriculumSubject",
+      "description": "Subjects under each curriculum"
     }
   }
 }

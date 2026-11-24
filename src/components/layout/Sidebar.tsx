@@ -17,7 +17,8 @@ import {
   X,
   School,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  BookMarked
 } from 'lucide-react';
 import { UserRole, SystemSettings, AcademicYear } from '../../types';
 
@@ -52,6 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'classes', label: 'จัดการชั้นเรียน', icon: GraduationCap, color: 'text-[#FFCA28]' },
     { id: 'users', label: 'จัดการผู้ใช้งาน', icon: Users, color: 'text-[#FF8A65]' },
     { id: 'students', label: 'จัดการนักเรียน', icon: UserCheck, color: 'text-[#0288D1]' },
+    { id: 'curriculums', label: 'หลักสูตร', icon: BookMarked, color: 'text-[#00897B]' },
     { id: 'subjects', label: 'จัดการรายวิชา', icon: BookOpen, color: 'text-[#4A2C6D]' },
     { id: 'assignments', label: 'มอบหมายชั้นเรียนที่สอน', icon: CalendarCheck, color: 'text-[#F57C00]' },
     { id: 'report', label: 'รายงานการเช็คชื่อ', icon: FileText, color: 'text-[#26A69A]' },
