@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   ClipboardCheck,
   Calendar,
+  CalendarOff,
   Clock,
   CheckCircle2,
   XCircle,
@@ -28,14 +29,16 @@ import {
   AttendanceStatus,
   StudentAttendanceItem,
   AcademicYear,
-  AppUser
+  AppUser,
+  SchoolCalendarEntry
 } from '../../types';
 import {
   DAY_ORDER,
   formatToThaiBE,
   formatThaiFullDate,
-  getDayOfWeekFromDate,
-  getTodayISODate
+  getTodayISODate,
+  getThaiWeekdayName,
+  resolveCalendarDateStatus
 } from '../../utils/thaiDate';
 
 interface TeacherAttendanceViewProps {
@@ -48,6 +51,7 @@ interface TeacherAttendanceViewProps {
   subjects: Subject[];
   students: Student[];
   attendanceLogs: AttendanceLog[];
+  calendarEntries?: SchoolCalendarEntry[];
   activeYear?: AcademicYear;
   pendingAssignment?: TeachingAssignment | null;
   onClearPendingAssignment?: () => void;
@@ -69,6 +73,7 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
   subjects,
   students,
   attendanceLogs,
+  calendarEntries = [],
   activeYear,
   pendingAssignment,
   onClearPendingAssignment,
@@ -82,8 +87,15 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
   // Date Picker state (defaults to today's ISO date e.g. 2026-10-14)
   const [selectedDate, setSelectedDate] = useState<string>(getTodayISODate());
 
-  // Determine active day of week from selected date
-  const selectedDayOfWeek = getDayOfWeekFromDate(selectedDate);
+  // Resolve calendar status (holiday, weekend, opened-normal, transferred weekday)
+  const dateCalendarStatus = useMemo(
+    () => resolveCalendarDateStatus(selectedDate, calendarEntries),
+    [selectedDate, calendarEntries]
+  );
+
+  // Active teaching DayOfWeek for selectedDate (null when holiday/weekend)
+  const selectedDayOfWeek = dateCalendarStatus.effectiveDayOfWeek;
+  const actualWeekdayName = getThaiWeekdayName(selectedDate);
 
   const todayISODate = getTodayISODate();
 
@@ -227,6 +239,16 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
   useEffect(() => {
     if (pendingAssignment) {
       const today = getTodayISODate();
+      const todayCalStatus = resolveCalendarDateStatus(today, calendarEntries);
+      if (todayCalStatus.isHoliday) {
+        showToast(
+          'warning',
+          `วันนี้ (${formatToThaiBE(today)}) เป็น${todayCalStatus.holidayTitle} ไม่สามารถเช็คชื่อนักเรียนได้`
+        );
+        onClearPendingAssignment?.();
+        return;
+      }
+
       if (isDelegatedToSubstitute(pendingAssignment, teacherUsername, today)) {
         const subName =
           teachers.find((t) => t.username === pendingAssignment.substituteTeacherUsername)?.fullName ||
@@ -278,6 +300,15 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
 
   // Open attendance modal for a timetable slot
   const handleSlotClick = (assignment: TeachingAssignment, slotDay: DayOfWeek) => {
+    // ENFORCE: Block checking attendance on holidays or weekends (unless opened as normal)
+    if (dateCalendarStatus.isHoliday) {
+      showToast(
+        'warning',
+        `วันที่ ${formatToThaiBE(selectedDate)} เป็น${dateCalendarStatus.holidayTitle} ไม่สามารถเช็คชื่อนักเรียนได้`
+      );
+      return;
+    }
+
     // ENFORCE: Block checking attendance if this class was delegated to a substitute teacher for selectedDate
     if (isDelegatedToSubstitute(assignment, teacherUsername, selectedDate)) {
       const subName =
@@ -296,7 +327,9 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
     if (slotDay !== selectedDayOfWeek) {
       showToast(
         'warning',
-        `วันที่ท่านเลือก (${formatToThaiBE(selectedDate)}) ตรงกับวัน${selectedDayOfWeek || '-'} ไม่สามารถเช็คชื่อตารางสอนของวัน${slotDay}ได้`
+        selectedDayOfWeek
+          ? `วันที่ท่านเลือก (${formatToThaiBE(selectedDate)}) จัดสอนตามตารางวัน${selectedDayOfWeek} ไม่สามารถเช็คชื่อตารางสอนของวัน${slotDay}ได้`
+          : `วันที่ท่านเลือก (${formatToThaiBE(selectedDate)}) ยังไม่มีตารางสอนที่เปิดใช้งาน`
       );
       return;
     }
@@ -366,6 +399,19 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
   const handleSaveAttendance = async () => {
     if (!activeAssignment) return;
 
+    const targetDate = editingLogId
+      ? teacherLogs.find((l) => l.id === editingLogId)?.date || selectedDate
+      : selectedDate;
+    const targetCalStatus = resolveCalendarDateStatus(targetDate, calendarEntries);
+    if (targetCalStatus.isHoliday) {
+      showToast(
+        'warning',
+        `วันที่ ${formatToThaiBE(targetDate)} เป็น${targetCalStatus.holidayTitle} ไม่สามารถเช็คชื่อนักเรียนได้`
+      );
+      setIsCheckModalOpen(false);
+      return;
+    }
+
     setIsSaving(true);
     try {
       const summaryPayload = {
@@ -426,6 +472,15 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
 
   // Open edit modal directly from logs table
   const handleEditFromLog = (log: AttendanceLog) => {
+    const logCalStatus = resolveCalendarDateStatus(log.date, calendarEntries);
+    if (logCalStatus.isHoliday) {
+      showToast(
+        'warning',
+        `วันที่ ${formatToThaiBE(log.date)} เป็น${logCalStatus.holidayTitle} ไม่สามารถเช็คชื่อหรือแก้ไขข้อมูลในวันหยุดได้`
+      );
+      return;
+    }
+
     const matchedAssignment = myAssignments.find(
       (a) => a.subjectId === log.subjectId && a.classId === log.classId && a.periodId === log.periodId
     ) || {
@@ -463,7 +518,13 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
             <span>ตารางสอนและการเช็คชื่อนักเรียน</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            {formatThaiFullDate(selectedDate)} (ตรงกับวัน{selectedDayOfWeek || '-'})
+            {formatThaiFullDate(selectedDate)} (ตรงกับวัน{actualWeekdayName || '-'}
+            {dateCalendarStatus.isHoliday
+              ? ` • ${dateCalendarStatus.holidayTitle}`
+              : dateCalendarStatus.isOpenedNormal && selectedDayOfWeek
+              ? ` • เปิดสอนตารางวัน${selectedDayOfWeek}`
+              : ''}
+            )
           </p>
         </div>
 
@@ -493,6 +554,36 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
           <Users className="w-4 h-4 text-amber-700 shrink-0" />
           <span>
             <strong>โหมดจัดสอนแทนล่วงหน้าเปิดอยู่:</strong> คลิกที่คาบสอนในตารางด้านล่างเพื่อเลือกครูผู้สอนแทนและกำหนดวันที่ต้องการให้สอนแทน หรือคลิกเพื่อแก้ไข/ยกเลิก
+          </span>
+        </div>
+      ) : dateCalendarStatus.isHoliday ? (
+        <div className="p-4 rounded-2xl bg-red-50 border border-red-300 text-red-900 text-xs flex items-center gap-3 shadow-2xs">
+          <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+          <div>
+            <div className="font-bold text-sm text-red-800">
+              วันหยุด: {dateCalendarStatus.holidayTitle}
+            </div>
+            <div className="text-red-700 mt-0.5">
+              วันที่ <strong>{formatToThaiBE(selectedDate)}</strong> เป็นวันหยุดตามปฏิทินการศึกษา ระบบปิดการเช็คชื่อนักเรียนสำหรับวันนี้ (หากต้องการจัดสอนแทนล่วงหน้ายังสามารถเปิดโหมดจัดสอนแทนได้)
+            </div>
+          </div>
+        </div>
+      ) : dateCalendarStatus.isOpenedNormal ? (
+        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs flex items-center gap-2.5 shadow-2xs">
+          <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+          <span>
+            <strong>วันเปิดเรียนปกติ ({dateCalendarStatus.entry?.title || 'เปิดสอนชดเชย'}):</strong>{' '}
+            วันที่ <strong>{formatToThaiBE(selectedDate)}</strong>{' '}
+            {selectedDayOfWeek ? (
+              <>
+                ระบบเปิดให้เช็คชื่อตามตารางสอนของ <strong>วัน{selectedDayOfWeek}</strong>
+                {dateCalendarStatus.entry?.transferredFromDate
+                  ? ` (โอนมาจากวันที่ ${formatToThaiBE(dateCalendarStatus.entry.transferredFromDate)})`
+                  : ''}
+              </>
+            ) : (
+              'ยังไม่ได้กำหนดตารางสอนที่โอนมาสำหรับวันนี้'
+            )}
           </span>
         </div>
       ) : (
@@ -560,12 +651,17 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
             <tbody className="divide-y divide-slate-200 text-xs">
               {DAY_ORDER.map((day) => {
                 const isSelectedDay = day === selectedDayOfWeek;
+                const isHolidayRow = dateCalendarStatus.isHoliday && day === actualWeekdayName;
 
                 return (
                   <tr
                     key={day}
                     className={`transition-colors ${
-                      isSelectedDay ? 'bg-teal-50/30' : 'hover:bg-slate-50/50'
+                      isSelectedDay
+                        ? 'bg-teal-50/30'
+                        : isHolidayRow
+                        ? 'bg-rose-50/30'
+                        : 'hover:bg-slate-50/50'
                     }`}
                   >
                     {/* Left: Monday - Friday */}
@@ -573,14 +669,29 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
                       className={`py-5 px-4 font-bold border-r border-slate-200 text-center ${
                         isSelectedDay
                           ? 'bg-[#0C7C82] text-white shadow-xs'
+                          : isHolidayRow
+                          ? 'bg-rose-600 text-white shadow-xs'
                           : 'bg-slate-50/70 text-slate-700'
                       }`}
                     >
                       <div className="text-sm">วัน{day}</div>
                       {isSelectedDay ? (
                         <span className="inline-block px-2 py-0.5 mt-1 rounded-full text-[10px] bg-white text-[#0C7C82] font-extrabold shadow-2xs">
-                          วันปัจจุบัน
+                          {dateCalendarStatus.isOpenedNormal ? 'เปิดสอนวันนี้' : 'วันปัจจุบัน'}
                         </span>
+                      ) : isHolidayRow ? (
+                        <div className="mt-1 space-y-0.5">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-white text-rose-700 font-extrabold shadow-2xs">
+                            <CalendarOff className="w-3 h-3" />
+                            <span>วันหยุด</span>
+                          </span>
+                          <div
+                            className="text-[10px] text-rose-100 font-medium line-clamp-1"
+                            title={dateCalendarStatus.holidayTitle}
+                          >
+                            {dateCalendarStatus.holidayTitle}
+                          </div>
+                        </div>
                       ) : (
                         <span className="text-[10px] text-slate-400 font-normal block mt-0.5">
                           ล็อค
@@ -682,6 +793,8 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
                                   : 'cursor-pointer hover:scale-102 hover:shadow-md bg-red-50 border-red-400 ring-1 ring-red-300'
                                 : isSubstitutionMode
                                 ? 'cursor-pointer hover:scale-102 hover:shadow-md border-amber-300 bg-amber-50/40 ring-1 ring-amber-200'
+                                : isHolidayRow
+                                ? 'cursor-not-allowed opacity-75 bg-rose-50/60 border-rose-200'
                                 : isSelectedDay
                                 ? 'cursor-pointer hover:scale-102 hover:shadow-md border-teal-300 bg-white ring-1 ring-teal-200'
                                 : 'cursor-pointer opacity-70 bg-slate-50 border-slate-200 hover:opacity-90'
@@ -710,6 +823,11 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
                                 <span className="inline-flex items-center gap-0.5 text-[10px] text-red-700 font-bold bg-red-100 px-1.5 py-0.5 rounded-full border border-red-300">
                                   <Lock className="w-3 h-3" />
                                   <span>มอบสอนแทนแล้ว</span>
+                                </span>
+                              ) : isHolidayRow ? (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] text-rose-700 font-bold bg-rose-100 px-1.5 py-0.5 rounded-full border border-rose-300">
+                                  <CalendarOff className="w-3 h-3" />
+                                  <span>วันหยุด</span>
                                 </span>
                               ) : isSelectedDay ? (
                                 isAlreadyChecked ? (

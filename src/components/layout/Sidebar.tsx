@@ -49,6 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'แดชบอร์ด', icon: LayoutDashboard, color: 'text-[#0C7C82]' },
     { id: 'settings', label: 'ตั้งค่าระบบ', icon: Settings, color: 'text-[#35B4B0]' },
     { id: 'years', label: 'จัดการปีการศึกษา', icon: Calendar, color: 'text-[#26A69A]' },
+    { id: 'calendar', label: 'กำหนดปฏิทิน', icon: CalendarDays, color: 'text-[#E53935]' },
     { id: 'periods', label: 'คาบสอน/ชั่วโมงสอน', icon: Clock, color: 'text-[#AED581]' },
     { id: 'classes', label: 'จัดการชั้นเรียน', icon: GraduationCap, color: 'text-[#FFCA28]' },
     { id: 'users', label: 'จัดการผู้ใช้งาน', icon: Users, color: 'text-[#FF8A65]' },

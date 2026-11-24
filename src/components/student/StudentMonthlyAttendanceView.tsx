@@ -17,8 +17,8 @@ import {
   TrendingUp,
   ChevronDown
 } from 'lucide-react';
-import { Student, AttendanceLog, Subject, Classroom, AcademicYear, SystemSettings, AppUser } from '../../types';
-import { getAcademicYearMonths, YearMonthOption, THAI_MONTHS_FULL, formatToThaiBE } from '../../utils/thaiDate';
+import { Student, AttendanceLog, Subject, Classroom, AcademicYear, SystemSettings, AppUser, SchoolCalendarEntry } from '../../types';
+import { getAcademicYearMonths, YearMonthOption, THAI_MONTHS_FULL, formatToThaiBE, resolveCalendarDateStatus } from '../../utils/thaiDate';
 
 interface StudentMonthlyAttendanceViewProps {
   currentStudent: Student;
@@ -26,6 +26,7 @@ interface StudentMonthlyAttendanceViewProps {
   subjects: Subject[];
   classes: Classroom[];
   teachers: AppUser[];
+  calendarEntries?: SchoolCalendarEntry[];
   activeYear?: AcademicYear;
   settings: SystemSettings;
 }
@@ -36,6 +37,7 @@ export const StudentMonthlyAttendanceView: React.FC<StudentMonthlyAttendanceView
   subjects,
   classes,
   teachers,
+  calendarEntries = [],
   activeYear,
   settings
 }) => {
@@ -65,9 +67,10 @@ export const StudentMonthlyAttendanceView: React.FC<StudentMonthlyAttendanceView
     role: 'teacher' as const
   };
 
-  // Filter logs for this student and this month (or whole semester if 'all')
+  // Filter logs for this student and this month (exclude holiday dates)
   const monthlyLogs = useMemo(() => {
     return attendanceLogs.filter((log) => {
+      if (resolveCalendarDateStatus(log.date, calendarEntries).isHoliday) return false;
       const matchStudent = log.records?.some(
         (r) => r.studentId === currentStudent.id || r.studentName === currentStudent.name
       );
@@ -75,7 +78,7 @@ export const StudentMonthlyAttendanceView: React.FC<StudentMonthlyAttendanceView
       if (selectedMonthKey === 'all') return true;
       return log.date.startsWith(selectedMonthKey);
     });
-  }, [attendanceLogs, currentStudent, selectedMonthKey]);
+  }, [attendanceLogs, currentStudent, selectedMonthKey, calendarEntries]);
 
   // Unique days with recorded attendance in this month
   const uniqueRecordedDays = useMemo(() => {

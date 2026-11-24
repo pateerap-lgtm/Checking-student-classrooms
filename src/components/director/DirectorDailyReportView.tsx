@@ -25,13 +25,14 @@ import {
   Student,
   AppUser,
   SystemSettings,
-  AcademicYear
+  AcademicYear,
+  SchoolCalendarEntry
 } from '../../types';
 import {
   getTodayISODate,
-  getDayOfWeekFromDate,
   formatThaiFullDate,
-  formatToThaiBE
+  formatToThaiBE,
+  resolveCalendarDateStatus
 } from '../../utils/thaiDate';
 
 interface DirectorDailyReportViewProps {
@@ -44,6 +45,7 @@ interface DirectorDailyReportViewProps {
   teachers: AppUser[];
   allUsers: AppUser[];
   settings: SystemSettings;
+  calendarEntries?: SchoolCalendarEntry[];
   activeYear?: AcademicYear;
 }
 
@@ -57,6 +59,7 @@ export const DirectorDailyReportView: React.FC<DirectorDailyReportViewProps> = (
   teachers,
   allUsers,
   settings,
+  calendarEntries = [],
   activeYear
 }) => {
   // 1. Filter States
@@ -95,10 +98,13 @@ export const DirectorDailyReportView: React.FC<DirectorDailyReportViewProps> = (
     return 'นายสมศักดิ์ รักเรียน';
   }, [settings.directorName, allUsers]);
 
-  // Day of week from selected date
-  const dayOfWeek = useMemo(() => {
-    return getDayOfWeekFromDate(selectedDate);
-  }, [selectedDate]);
+  // Day of week from selected date (respecting calendar holidays & weekend opened-normal overrides)
+  const dateCalendarStatus = useMemo(
+    () => resolveCalendarDateStatus(selectedDate, calendarEntries),
+    [selectedDate, calendarEntries]
+  );
+
+  const dayOfWeek = dateCalendarStatus.effectiveDayOfWeek;
 
   // Sorted Periods
   const sortedPeriods = useMemo(() => {
@@ -113,13 +119,13 @@ export const DirectorDailyReportView: React.FC<DirectorDailyReportViewProps> = (
     );
   }, [assignments, currentClass, dayOfWeek]);
 
-  // Logs already recorded for this class on this date
+  // Logs already recorded for this class on this date (exclude on holidays)
   const dateClassLogs = useMemo(() => {
-    if (!currentClass) return [];
+    if (!currentClass || dateCalendarStatus.isHoliday) return [];
     return attendanceLogs.filter(
       (l) => l.classId === currentClass.id && l.date === selectedDate
     );
-  }, [attendanceLogs, currentClass, selectedDate]);
+  }, [attendanceLogs, currentClass, selectedDate, dateCalendarStatus.isHoliday]);
 
   // Build daily rows combining assignments and attendance logs
   interface DailyReportRow {
@@ -379,10 +385,18 @@ export const DirectorDailyReportView: React.FC<DirectorDailyReportViewProps> = (
                 วันนี้
               </button>
             </div>
-            <div className="text-xs font-semibold text-[#0C7C82] flex items-center gap-1.5 pt-0.5">
+            <div className="text-xs font-semibold text-[#0C7C82] flex flex-wrap items-center gap-1.5 pt-0.5">
               <Calendar className="w-3.5 h-3.5" />
               <span>{formatThaiFullDate(selectedDate)}</span>
-              {dayOfWeek ? (
+              {dateCalendarStatus.isHoliday ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-rose-100 text-rose-800">
+                  {dateCalendarStatus.holidayTitle}
+                </span>
+              ) : dateCalendarStatus.isOpenedNormal && dayOfWeek ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 text-emerald-800">
+                  เปิดสอนปกติ (ตารางวัน{dayOfWeek})
+                </span>
+              ) : dayOfWeek ? (
                 <span className="px-2 py-0.5 rounded-full text-[10px] bg-teal-100 text-teal-800">
                   วัน{dayOfWeek}
                 </span>
@@ -594,7 +608,9 @@ export const DirectorDailyReportView: React.FC<DirectorDailyReportViewProps> = (
                       ไม่มีตารางสอนหรือบันทึกการเช็คชื่อในวันนี้
                     </p>
                     <p className="text-xs text-slate-400 mt-1">
-                      {dayOfWeek
+                      {dateCalendarStatus.isHoliday
+                        ? `${dateCalendarStatus.holidayTitle} (งดการเรียนการสอนและไม่มีการเช็คชื่อ)`
+                        : dayOfWeek
                         ? `ห้องเรียน ${currentClass?.name} ไม่มีคาบสอนในวัน${dayOfWeek}`
                         : 'วันที่เลือกตรงกับวันหยุดสุดสัปดาห์ (เสาร์ - อาทิตย์)'}
                     </p>

@@ -19,8 +19,8 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { Chart, registerables } from 'chart.js';
-import { TeachingAssignment, Classroom, Subject, Student, AttendanceLog, Period, AcademicYear } from '../../types';
-import { getTodayISODate, getDayOfWeekFromDate, formatToThaiBE, formatThaiFullDate } from '../../utils/thaiDate';
+import { TeachingAssignment, Classroom, Subject, Student, AttendanceLog, Period, AcademicYear, SchoolCalendarEntry } from '../../types';
+import { getTodayISODate, formatToThaiBE, formatThaiFullDate, resolveCalendarDateStatus } from '../../utils/thaiDate';
 
 Chart.register(...registerables);
 
@@ -33,6 +33,7 @@ interface TeacherDashboardProps {
   subjects: Subject[];
   students: Student[];
   attendanceLogs: AttendanceLog[];
+  calendarEntries?: SchoolCalendarEntry[];
   activeYear?: AcademicYear;
   onNavigateTab: (tabId: string) => void;
   onSelectAssignmentForAttendance?: (assignment: TeachingAssignment) => void;
@@ -48,6 +49,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   subjects,
   students,
   attendanceLogs,
+  calendarEntries = [],
   activeYear,
   onNavigateTab,
   onSelectAssignmentForAttendance,
@@ -56,9 +58,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const chartRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstance = useRef<Chart | null>(null);
 
-  // Today's date and day of week
+  // Today's date and calendar status
   const todayISODate = getTodayISODate();
-  const todayDayOfWeek = getDayOfWeekFromDate(todayISODate);
+  const todayCalendarStatus = useMemo(
+    () => resolveCalendarDateStatus(todayISODate, calendarEntries),
+    [todayISODate, calendarEntries]
+  );
+  const todayDayOfWeek = todayCalendarStatus.effectiveDayOfWeek;
 
   const isAssignmentActiveForTeacher = (a: TeachingAssignment, username: string, dateStr: string) => {
     const isOriginal = a.teacherUsername === username;
@@ -127,11 +133,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
 
 
-  // Teaching periods scheduled for TODAY
+  // Teaching periods scheduled for TODAY (empty if holiday)
   const todayAssignments = useMemo(() => {
-    if (!todayDayOfWeek) return [];
+    if (todayCalendarStatus.isHoliday || !todayDayOfWeek) return [];
     return myAssignments.filter((a) => a.dayOfWeek === todayDayOfWeek);
-  }, [myAssignments, todayDayOfWeek]);
+  }, [myAssignments, todayDayOfWeek, todayCalendarStatus.isHoliday]);
 
   // Status for each of today's periods (Checked vs Unchecked Overdue vs Upcoming)
   const todayScheduleItems = useMemo(() => {
@@ -425,13 +431,56 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </h2>
           <p className="text-teal-100 text-xs sm:text-sm mt-1 max-w-xl">
             ท่านได้รับมอบหมายการสอนทั้งหมด {myAssignments.length} คาบต่อสัปดาห์ใน {myClasses.length} ชั้นเรียน
-            {todayAssignments.length > 0
+            {todayCalendarStatus.isHoliday
+              ? ` • วันนี้เป็นวันหยุด (${todayCalendarStatus.holidayTitle}) งดการเช็คชื่อ`
+              : todayCalendarStatus.isOpenedNormal
+              ? ` • เปิดสอนปกติ (ใช้ตารางสอนวัน${todayDayOfWeek}) จำนวน ${todayAssignments.length} คาบ`
+              : todayAssignments.length > 0
               ? ` • วันนี้มีตารางสอน ${todayAssignments.length} คาบ`
               : ' • วันนี้ไม่มีตารางสอนตามกำหนด'}
           </p>
         </div>
         <div className="absolute right-4 -bottom-6 w-32 h-32 rounded-full bg-white/10 blur-xl"></div>
       </div>
+
+      {/* Holiday or Opened-Normal Status Banner */}
+      {todayCalendarStatus.isHoliday ? (
+        <div className="bg-rose-50 border border-rose-200 rounded-3xl p-5 text-rose-900 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+              <Calendar className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="font-bold text-sm text-rose-900">
+                วันนี้เป็นวันหยุด: {todayCalendarStatus.holidayTitle}
+              </div>
+              <div className="text-xs text-rose-700 mt-0.5">
+                {todayCalendarStatus.isWeekend
+                  ? 'วันเสาร์-อาทิตย์เป็นวันหยุดอัตโนมัติ (สามารถเปิดสอนปกติได้จากเมนู กำหนดปฏิทิน ของผู้ดูแลระบบ)'
+                  : 'วันหยุดราชการตามปฏิทินสถานศึกษา ระบบงดการเช็คชื่อนักเรียนในวันนี้'}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : todayCalendarStatus.isOpenedNormal ? (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-4 sm:p-5 text-emerald-900 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-bold text-sm text-emerald-900">
+                {todayCalendarStatus.holidayTitle} • เปิดสอนตามตารางวัน{todayDayOfWeek}
+              </div>
+              <div className="text-xs text-emerald-700">
+                {todayCalendarStatus.entry?.transferredFromDate
+                  ? `โอนตารางสอนจากวันที่ ${formatToThaiBE(todayCalendarStatus.entry.transferredFromDate)} มาเปิดสอนในวันนี้`
+                  : `ใช้ตารางสอนของวัน${todayDayOfWeek} สำหรับการเช็คชื่อวันนี้`}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* FEATURE 2: ระบบแจ้งเตือนคาบเรียนที่ถึงกำหนดแล้วแต่ยังไม่ได้เช็คชื่อวันนี้ */}
       {overdueItems.length > 0 ? (

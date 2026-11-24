@@ -144,3 +144,16 @@ export interface AttendanceLog {
   summary: AttendanceSummary;
   updatedAt: string;
 }
+
+export type CalendarDayType = 'holiday' | 'normal';
+
+export interface SchoolCalendarEntry {
+  id: string;
+  date: string; // YYYY-MM-DD
+  type: CalendarDayType;
+  title: string;
+  transferDayOfWeek?: DayOfWeek;
+  transferredFromDate?: string;
+  academicYearId?: string;
+  updatedAt?: string;
+}

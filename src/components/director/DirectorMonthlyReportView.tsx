@@ -19,11 +19,13 @@ import {
   Student,
   AppUser,
   SystemSettings,
-  AcademicYear
+  AcademicYear,
+  SchoolCalendarEntry
 } from '../../types';
 import {
   getAcademicYearMonths,
-  YearMonthOption
+  YearMonthOption,
+  resolveCalendarDateStatus
 } from '../../utils/thaiDate';
 
 interface DirectorMonthlyReportViewProps {
@@ -34,6 +36,7 @@ interface DirectorMonthlyReportViewProps {
   teachers: AppUser[];
   allUsers: AppUser[];
   settings: SystemSettings;
+  calendarEntries?: SchoolCalendarEntry[];
   activeYear?: AcademicYear;
 }
 
@@ -45,6 +48,7 @@ export const DirectorMonthlyReportView: React.FC<DirectorMonthlyReportViewProps>
   teachers,
   allUsers,
   settings,
+  calendarEntries = [],
   activeYear
 }) => {
   // Available Months for Selection (Thai BE e.g. "พฤษภาคม 2569")
@@ -100,13 +104,16 @@ export const DirectorMonthlyReportView: React.FC<DirectorMonthlyReportViewProps>
     return subjects.filter((s) => s.classId === currentClass.id);
   }, [subjects, currentClass]);
 
-  // Attendance logs for this class in selected month
+  // Attendance logs for this class in selected month (exclude holiday dates)
   const monthlyLogs = useMemo(() => {
     if (!currentClass || !selectedMonthKey) return [];
     return attendanceLogs.filter(
-      (l) => l.classId === currentClass.id && l.date.startsWith(selectedMonthKey)
+      (l) =>
+        l.classId === currentClass.id &&
+        l.date.startsWith(selectedMonthKey) &&
+        !resolveCalendarDateStatus(l.date, calendarEntries).isHoliday
     );
-  }, [attendanceLogs, currentClass, selectedMonthKey]);
+  }, [attendanceLogs, currentClass, selectedMonthKey, calendarEntries]);
 
   // Compute aggregated summary per subject for the monthly table
   interface MonthlySubjectRow {

@@ -16,8 +16,8 @@ import {
   CalendarRange,
   GraduationCap
 } from 'lucide-react';
-import { Student, AttendanceLog, Subject, Classroom, AcademicYear, SystemSettings, AppUser } from '../../types';
-import { formatToThaiBE, formatThaiFullDate } from '../../utils/thaiDate';
+import { Student, AttendanceLog, Subject, Classroom, AcademicYear, SystemSettings, AppUser, SchoolCalendarEntry } from '../../types';
+import { formatToThaiBE, formatThaiFullDate, resolveCalendarDateStatus } from '../../utils/thaiDate';
 
 interface StudentDashboardViewProps {
   currentStudent: Student;
@@ -25,6 +25,7 @@ interface StudentDashboardViewProps {
   subjects: Subject[];
   classes: Classroom[];
   teachers: AppUser[];
+  calendarEntries?: SchoolCalendarEntry[];
   activeYear?: AcademicYear;
   settings: SystemSettings;
   onNavigateTab: (tab: string) => void;
@@ -36,21 +37,23 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
   subjects,
   classes,
   teachers,
+  calendarEntries = [],
   activeYear,
   settings,
   onNavigateTab
 }) => {
-  // Filter attendance logs that contain this student or match student's class
+  // Filter attendance logs that contain this student (exclude holiday dates)
   const studentLogs = useMemo(() => {
     return attendanceLogs
       .filter((log) => {
+        if (resolveCalendarDateStatus(log.date, calendarEntries).isHoliday) return false;
         const hasStudentRecord = log.records?.some(
           (r) => r.studentId === currentStudent.id || r.studentName === currentStudent.name
         );
         return hasStudentRecord;
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [attendanceLogs, currentStudent]);
+  }, [attendanceLogs, currentStudent, calendarEntries]);
 
   // Overall Attendance Metrics
   const stats = useMemo(() => {

@@ -38,6 +38,7 @@ import {
   CurriculumSubject,
   TeachingAssignment,
   AttendanceLog,
+  SchoolCalendarEntry,
   UserRole
 } from './types';
 import { LoginPage } from './components/auth/LoginPage';
@@ -59,6 +60,7 @@ import { StudentsView } from './components/admin/StudentsView';
 import { CurriculumsView } from './components/admin/CurriculumsView';
 import { SubjectsView } from './components/admin/SubjectsView';
 import { AssignmentsView } from './components/admin/AssignmentsView';
+import { CalendarView } from './components/admin/CalendarView';
 
 // Teacher Views
 import { TeacherDashboard } from './components/teacher/TeacherDashboard';
@@ -108,6 +110,7 @@ export default function App() {
   const [curriculumSubjects, setCurriculumSubjects] = useState<CurriculumSubject[]>([]);
   const [assignments, setAssignments] = useState<TeachingAssignment[]>(DEFAULT_ASSIGNMENTS);
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
+  const [calendarEntries, setCalendarEntries] = useState<SchoolCalendarEntry[]>([]);
 
   // Teacher navigation state
   const [pendingAttendanceAssignment, setPendingAttendanceAssignment] = useState<TeachingAssignment | null>(null);
@@ -225,6 +228,12 @@ export default function App() {
     );
   }, [attendanceLogs, activeYearId, activeYear]);
 
+  const currentYearCalendarEntries = useMemo(() => {
+    return calendarEntries.filter(
+      (c) => c.academicYearId === activeYearId || (!c.academicYearId && (activeYear?.isCurrent || activeYearId === 'year_2569'))
+    );
+  }, [calendarEntries, activeYearId, activeYear]);
+
   // Initialize and attach Firestore real-time listeners
   useEffect(() => {
     testConnection();
@@ -318,6 +327,14 @@ export default function App() {
       setIsLoading(false);
     });
 
+    // Listen to School Calendar Entries
+    const unsubCalendar = onSnapshot(collection(db, 'schoolCalendar'), (snap) => {
+      const list: SchoolCalendarEntry[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() } as SchoolCalendarEntry));
+      list.sort((a, b) => a.date.localeCompare(b.date));
+      setCalendarEntries(list);
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'schoolCalendar'));
+
     return () => {
       unsubSettings();
       unsubYears();
@@ -330,6 +347,7 @@ export default function App() {
       unsubCurriculumSubjects();
       unsubAssignments();
       unsubAttendance();
+      unsubCalendar();
     };
   }, []);
 
@@ -790,6 +808,46 @@ export default function App() {
     showToast('success', 'ลบประวัติการเช็คชื่อสำเร็จ');
   };
 
+  // School Calendar mutations
+  const sanitizeCalendarPayload = (entry: Omit<SchoolCalendarEntry, 'id'> & { id?: string }) => {
+    const yearId = entry.academicYearId || activeYearId;
+    const payload: Record<string, any> = {
+      date: entry.date,
+      type: entry.type,
+      title: entry.title,
+      academicYearId: yearId,
+      updatedAt: entry.updatedAt || new Date().toISOString()
+    };
+    if (entry.transferDayOfWeek) {
+      payload.transferDayOfWeek = entry.transferDayOfWeek;
+    }
+    if (entry.transferredFromDate) {
+      payload.transferredFromDate = entry.transferredFromDate;
+    }
+    return payload;
+  };
+
+  const handleSaveCalendarEntry = async (entry: Omit<SchoolCalendarEntry, 'id'> & { id?: string }) => {
+    const yearId = entry.academicYearId || activeYearId;
+    const docId = entry.id || `cal_${yearId}_${entry.date}`;
+    await setDoc(doc(db, 'schoolCalendar', docId), sanitizeCalendarPayload(entry));
+  };
+
+  const handleSaveCalendarEntriesBatch = async (entries: (Omit<SchoolCalendarEntry, 'id'> & { id?: string })[]) => {
+    if (entries.length === 0) return;
+    const batch = writeBatch(db);
+    entries.forEach((entry) => {
+      const yearId = entry.academicYearId || activeYearId;
+      const docId = entry.id || `cal_${yearId}_${entry.date}`;
+      batch.set(doc(db, 'schoolCalendar', docId), sanitizeCalendarPayload(entry));
+    });
+    await batch.commit();
+  };
+
+  const handleDeleteCalendarEntry = async (id: string) => {
+    await deleteDoc(doc(db, 'schoolCalendar', id));
+  };
+
   // Purge all sample data
   const handlePurgeAllData = () => {
     openConfirm(
@@ -991,6 +1049,7 @@ export default function App() {
                       students={currentYearStudents}
                       users={users}
                       attendanceLogs={currentYearAttendanceLogs}
+                      calendarEntries={currentYearCalendarEntries}
                       onNavigateTab={(tab) => {
                         if (tab === 'report' || tab === 'dashboard' || tab === 'daily-report' || tab === 'monthly-report') {
                           setCurrentTab(tab);
@@ -1019,6 +1078,8 @@ export default function App() {
                       teacherUsername={currentUser.username}
                       teacherFullName={currentUser.fullName}
                       currentUserRole={currentUser.role}
+                      calendarEntries={currentYearCalendarEntries}
+                      showToast={showToast}
                       activeYear={activeYear}
                       initialStudentId={pendingReportStudent?.studentId}
                       initialClassId={pendingReportStudent?.classId}
@@ -1043,6 +1104,7 @@ export default function App() {
                       teachers={users.filter((u) => u.role === 'teacher')}
                       allUsers={users}
                       settings={settings}
+                      calendarEntries={currentYearCalendarEntries}
                       activeYear={activeYear}
                     />
                   )}
@@ -1055,6 +1117,7 @@ export default function App() {
                       teachers={users.filter((u) => u.role === 'teacher')}
                       allUsers={users}
                       settings={settings}
+                      calendarEntries={currentYearCalendarEntries}
                       activeYear={activeYear}
                     />
                   )}
@@ -1071,6 +1134,7 @@ export default function App() {
                       students={currentYearStudents}
                       users={users}
                       attendanceLogs={currentYearAttendanceLogs}
+                      calendarEntries={currentYearCalendarEntries}
                       onNavigateTab={setCurrentTab}
                       academicYears={academicYears}
                       activeYear={activeYear}
@@ -1092,6 +1156,20 @@ export default function App() {
                       onDeleteYear={handleDeleteYear}
                       onSetCurrentYear={handleSetCurrentYear}
                       openConfirm={openConfirm}
+                    />
+                  )}
+                  {currentTab === 'calendar' && (
+                    <CalendarView
+                      calendarEntries={currentYearCalendarEntries}
+                      assignments={currentYearAssignments}
+                      teachers={users.filter((u) => u.role === 'teacher')}
+                      periods={currentYearPeriods}
+                      activeYear={activeYear}
+                      onSaveCalendarEntry={handleSaveCalendarEntry}
+                      onSaveCalendarEntriesBatch={handleSaveCalendarEntriesBatch}
+                      onDeleteCalendarEntry={handleDeleteCalendarEntry}
+                      openConfirm={openConfirm}
+                      showToast={showToast}
                     />
                   )}
                   {currentTab === 'periods' && (
@@ -1213,6 +1291,8 @@ export default function App() {
                       teacherUsername={currentUser.username}
                       teacherFullName={currentUser.fullName}
                       currentUserRole={currentUser.role}
+                      calendarEntries={currentYearCalendarEntries}
+                      showToast={showToast}
                       activeYear={activeYear}
                       initialStudentId={pendingReportStudent?.studentId}
                       initialClassId={pendingReportStudent?.classId}
@@ -1237,6 +1317,7 @@ export default function App() {
                       teachers={users.filter((u) => u.role === 'teacher')}
                       allUsers={users}
                       settings={settings}
+                      calendarEntries={currentYearCalendarEntries}
                       activeYear={activeYear}
                     />
                   )}
@@ -1249,6 +1330,7 @@ export default function App() {
                       teachers={users.filter((u) => u.role === 'teacher')}
                       allUsers={users}
                       settings={settings}
+                      calendarEntries={currentYearCalendarEntries}
                       activeYear={activeYear}
                     />
                   )}
@@ -1268,6 +1350,7 @@ export default function App() {
                       subjects={currentYearSubjects}
                       students={currentYearStudents}
                       attendanceLogs={currentYearAttendanceLogs}
+                      calendarEntries={currentYearCalendarEntries}
                       activeYear={activeYear}
                       onNavigateTab={setCurrentTab}
                       onSelectAssignmentForAttendance={(assignment) => {
@@ -1290,6 +1373,7 @@ export default function App() {
                       subjects={currentYearSubjects}
                       students={currentYearStudents}
                       attendanceLogs={currentYearAttendanceLogs}
+                      calendarEntries={currentYearCalendarEntries}
                       activeYear={activeYear}
                       pendingAssignment={pendingAttendanceAssignment}
                       onClearPendingAssignment={() => setPendingAttendanceAssignment(null)}
@@ -1318,6 +1402,8 @@ export default function App() {
                       teacherUsername={currentUser.username}
                       teacherFullName={currentUser.fullName}
                       currentUserRole={currentUser.role}
+                      calendarEntries={currentYearCalendarEntries}
+                      showToast={showToast}
                       activeYear={activeYear}
                       initialStudentId={pendingReportStudent?.studentId}
                       initialClassId={pendingReportStudent?.classId}
@@ -1351,6 +1437,7 @@ export default function App() {
                       subjects={currentYearSubjects}
                       classes={currentYearClasses}
                       teachers={users.filter((u) => u.role === 'teacher')}
+                      calendarEntries={currentYearCalendarEntries}
                       activeYear={activeYear}
                       settings={settings}
                       onNavigateTab={setCurrentTab}
@@ -1363,6 +1450,7 @@ export default function App() {
                       subjects={currentYearSubjects}
                       periods={currentYearPeriods}
                       classes={currentYearClasses}
+                      calendarEntries={currentYearCalendarEntries}
                       activeYear={activeYear}
                       settings={settings}
                     />
@@ -1374,6 +1462,7 @@ export default function App() {
                       subjects={currentYearSubjects}
                       classes={currentYearClasses}
                       teachers={users.filter((u) => u.role === 'teacher')}
+                      calendarEntries={currentYearCalendarEntries}
                       activeYear={activeYear}
                       settings={settings}
                     />

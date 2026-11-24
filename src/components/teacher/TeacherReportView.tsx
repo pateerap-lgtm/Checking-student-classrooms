@@ -42,7 +42,8 @@ import {
   StudentAttendanceItem,
   AppUser,
   Period,
-  UserRole
+  UserRole,
+  SchoolCalendarEntry
 } from '../../types';
 import {
   THAI_MONTHS_FULL,
@@ -50,7 +51,9 @@ import {
   formatThaiFullDate,
   getAcademicYearMonths,
   getDayOfWeekFromDate,
-  getTodayISODate
+  getThaiWeekdayName,
+  getTodayISODate,
+  resolveCalendarDateStatus
 } from '../../utils/thaiDate';
 
 export type ReportMode = 'daily_audit' | 'class' | 'individual';
@@ -71,6 +74,8 @@ interface TeacherReportViewProps {
   allUsers?: AppUser[];
   periods?: Period[];
   currentUserRole?: string;
+  calendarEntries?: SchoolCalendarEntry[];
+  showToast?: (type: 'success' | 'error' | 'warning' | 'info', message: string) => void;
   onUpdateAttendance?: (id: string, log: Partial<AttendanceLog>) => Promise<void>;
   onSaveAttendance?: (log: Omit<AttendanceLog, 'id'>) => Promise<void>;
   initialStudentId?: string | null;
@@ -96,6 +101,8 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
   allUsers = [],
   periods = [],
   currentUserRole = 'teacher',
+  calendarEntries = [],
+  showToast,
   onUpdateAttendance,
   onSaveAttendance,
   initialStudentId,
@@ -150,16 +157,19 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
     });
   };
 
-  const auditDayOfWeek = useMemo(() => {
-    return getDayOfWeekFromDate(selectedAuditDate);
-  }, [selectedAuditDate]);
+  const auditCalendarStatus = useMemo(
+    () => resolveCalendarDateStatus(selectedAuditDate, calendarEntries),
+    [selectedAuditDate, calendarEntries]
+  );
+
+  const auditDayOfWeek = auditCalendarStatus.effectiveDayOfWeek;
 
   const auditThaiDateFull = useMemo(() => {
     return formatThaiFullDate(selectedAuditDate);
   }, [selectedAuditDate]);
 
   const isAuditToday = selectedAuditDate === getTodayISODate();
-  const isAuditWeekend = !auditDayOfWeek;
+  const isAuditHoliday = auditCalendarStatus.isHoliday;
 
   // List of teachers for audit
   const effectiveTeacherList: AppUser[] = useMemo(() => {
@@ -470,7 +480,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
     return new Set<DayOfWeek>(list);
   }, [assignments, allAssignments, effectiveTeacherUsername, currentClass, currentSubject]);
 
-  // Logs for this teacher, class, subject, and selected month
+  // Logs for this teacher, class, subject, and selected month (exclude holiday dates)
   const monthLogs = useMemo(() => {
     if (!currentClass || !currentSubject) return [];
     const rawLogs = allAttendanceLogs || attendanceLogs;
@@ -479,9 +489,10 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
         l.teacherUsername === effectiveTeacherUsername &&
         (l.classId === currentClass.id || l.className === currentClass.name) &&
         (l.subjectId === currentSubject.id || l.subjectCode === currentSubject.code) &&
-        l.date.startsWith(selectedMonth)
+        l.date.startsWith(selectedMonth) &&
+        !resolveCalendarDateStatus(l.date, calendarEntries).isHoliday
     );
-  }, [attendanceLogs, allAttendanceLogs, effectiveTeacherUsername, currentClass, currentSubject, selectedMonth]);
+  }, [attendanceLogs, allAttendanceLogs, effectiveTeacherUsername, currentClass, currentSubject, selectedMonth, calendarEntries]);
 
   // Teaching periods lookup for assignment slot
   const matchedAssignment = useMemo(() => {
@@ -495,11 +506,15 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
     );
   }, [assignments, allAssignments, effectiveTeacherUsername, currentClass, currentSubject]);
 
-  // Determine all teaching dates in this month
+  // Determine all teaching dates in this month (strictly exclude holiday dates, include opened-normal weekends)
   const teachingDates = useMemo(() => {
     const datesSet = new Set<string>();
 
-    monthLogs.forEach((l) => datesSet.add(l.date));
+    monthLogs.forEach((l) => {
+      if (!resolveCalendarDateStatus(l.date, calendarEntries).isHoliday) {
+        datesSet.add(l.date);
+      }
+    });
 
     if (selectedMonth && assignedDaysOfWeek.size > 0) {
       const parts = selectedMonth.split('-');
@@ -509,15 +524,15 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
 
       for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const dayOfWeek = getDayOfWeekFromDate(dateStr);
-        if (dayOfWeek && assignedDaysOfWeek.has(dayOfWeek)) {
+        const calStatus = resolveCalendarDateStatus(dateStr, calendarEntries);
+        if (!calStatus.isHoliday && calStatus.effectiveDayOfWeek && assignedDaysOfWeek.has(calStatus.effectiveDayOfWeek)) {
           datesSet.add(dateStr);
         }
       }
     }
 
     return Array.from(datesSet).sort();
-  }, [monthLogs, selectedMonth, assignedDaysOfWeek]);
+  }, [monthLogs, selectedMonth, assignedDaysOfWeek, calendarEntries]);
 
   // Quick lookup map: date -> studentId (or name) -> status
   const attendanceMatrix = useMemo(() => {
@@ -548,6 +563,13 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
     newStatus: AttendanceStatus
   ) => {
     if (!currentClass || !currentSubject) return;
+
+    const dateCalStatus = resolveCalendarDateStatus(dateStr, calendarEntries);
+    if (dateCalStatus.isHoliday) {
+      showToast?.('warning', `วันที่ ${formatToThaiBE(dateStr)} เป็น${dateCalStatus.holidayTitle} ไม่สามารถเช็คชื่อนักเรียนได้`);
+      setActiveCellEdit(null);
+      return;
+    }
 
     const existingLog = monthLogs.find((l) => l.date === dateStr);
 
@@ -580,7 +602,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
         updatedAt: new Date().toISOString()
       });
     } else if (onSaveAttendance) {
-      const dayOfWeek = getDayOfWeekFromDate(dateStr) || 'จันทร์';
+      const dayOfWeek = dateCalStatus.effectiveDayOfWeek || getDayOfWeekFromDate(dateStr) || 'จันทร์';
       const initialRecords: StudentAttendanceItem[] = classStudents.map((std, idx) => ({
         studentId: std.id,
         seq: std.seq || idx + 1,
@@ -860,7 +882,11 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
                 teachingDates.map((dateStr, idx) => {
                   const dateMap = attendanceMatrix.get(dateStr);
                   const status = dateMap?.get(student.id) || dateMap?.get(student.name);
-                  const dayOfWeek = getDayOfWeekFromDate(dateStr) || '-';
+                  const calStatus = resolveCalendarDateStatus(dateStr, calendarEntries);
+                  const actualWeekday = getThaiWeekdayName(dateStr) || '-';
+                  const dayOfWeek = calStatus.isOpenedNormal && calStatus.effectiveDayOfWeek
+                    ? `${actualWeekday} (ตาราง${calStatus.effectiveDayOfWeek})`
+                    : actualWeekday;
 
                   let statusBadge = (
                     <span className="px-2 py-0.5 rounded text-[11px] font-bold text-slate-400">
@@ -1167,7 +1193,15 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
                 <span className="text-xs text-slate-600 font-medium hidden sm:inline">
                   {auditThaiDateFull}
                 </span>
-                {auditDayOfWeek ? (
+                {auditCalendarStatus.isHoliday ? (
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                    {auditCalendarStatus.holidayTitle}
+                  </span>
+                ) : auditCalendarStatus.isOpenedNormal && auditDayOfWeek ? (
+                  <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    เปิดสอนปกติ (ตารางวัน{auditDayOfWeek})
+                  </span>
+                ) : auditDayOfWeek ? (
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-extrabold ${
                       auditDayOfWeek === 'จันทร์'
@@ -1191,19 +1225,19 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
               </div>
             </div>
 
-            {/* Weekend Notice if applicable */}
-            {isAuditWeekend && (
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between">
+            {/* Holiday / Weekend Notice if applicable */}
+            {isAuditHoliday && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                   <span>
-                    วันที่เลือกตรงกับวันหยุดสุดสัปดาห์ (เสาร์-อาทิตย์) โดยปกติโรงเรียนจะไม่มีตารางสอน
+                    <strong>{auditCalendarStatus.holidayTitle}:</strong> วันที่เลือกเป็นวันหยุดตามปฏิทินการศึกษา ไม่มีการเรียนการสอนและการเช็คชื่อ
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSelectedAuditDate(getTodayISODate())}
-                  className="px-3 py-1 bg-white border border-amber-300 rounded-lg text-[11px] font-bold text-amber-900 hover:bg-amber-100 cursor-pointer"
+                  className="px-3 py-1 bg-white border border-rose-300 rounded-lg text-[11px] font-bold text-rose-900 hover:bg-rose-100 cursor-pointer shrink-0"
                 >
                   กลับสู่วันนี้
                 </button>
@@ -2067,8 +2101,8 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
                 <tr className="bg-slate-50 text-[11px] print:text-[8.5px] font-bold">
                   {teachingDates.map((dateStr) => {
                     const dayNum = parseInt(dateStr.split('-')[2], 10);
-                    const dayOfWeek = getDayOfWeekFromDate(dateStr);
-                    const shortDay = dayOfWeek ? dayOfWeek.slice(0, 2) : '';
+                    const weekdayName = getThaiWeekdayName(dateStr);
+                    const shortDay = weekdayName ? weekdayName.slice(0, 2) : '';
 
                     return (
                       <th
@@ -2150,6 +2184,11 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
                               <td
                                 key={dateStr}
                                 onClick={() => {
+                                  const calStatus = resolveCalendarDateStatus(dateStr, calendarEntries);
+                                  if (calStatus.isHoliday) {
+                                    showToast?.('warning', `วันที่ ${formatToThaiBE(dateStr)} เป็น${calStatus.holidayTitle} ไม่สามารถเช็คชื่อนักเรียนได้`);
+                                    return;
+                                  }
                                   setActiveCellEdit({
                                     dateStr,
                                     studentId: std.id,

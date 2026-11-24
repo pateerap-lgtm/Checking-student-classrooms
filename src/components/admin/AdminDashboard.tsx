@@ -37,7 +37,8 @@ import {
   YAxis,
   CartesianGrid
 } from 'recharts';
-import { Classroom, Subject, Student, AppUser, AttendanceLog, AcademicYear } from '../../types';
+import { Classroom, Subject, Student, AppUser, AttendanceLog, AcademicYear, SchoolCalendarEntry } from '../../types';
+import { resolveCalendarDateStatus } from '../../utils/thaiDate';
 
 Chart.register(...registerables);
 
@@ -47,6 +48,7 @@ interface AdminDashboardProps {
   students: Student[];
   users: AppUser[];
   attendanceLogs: AttendanceLog[];
+  calendarEntries?: SchoolCalendarEntry[];
   onNavigateTab: (tabId: string) => void;
   academicYears?: AcademicYear[];
   activeYear?: AcademicYear;
@@ -59,6 +61,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   students,
   users,
   attendanceLogs,
+  calendarEntries = [],
   onNavigateTab,
   academicYears = [],
   activeYear,
@@ -89,9 +92,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return academicYears.find((y) => y.id === selectedYearId) || activeYear || academicYears[0];
   }, [academicYears, selectedYearId, activeYear]);
 
-  // Filter Attendance Logs by Year & Semester
+  // Filter Attendance Logs by Year & Semester (excluding holiday dates)
   const filteredAttendanceLogs = useMemo(() => {
     return attendanceLogs.filter((log) => {
+      if (resolveCalendarDateStatus(log.date, calendarEntries).isHoliday) {
+        return false;
+      }
+
       // 1. Year filter
       if (currentSelectedYear) {
         if (log.academicYearId && log.academicYearId !== currentSelectedYear.id) {
@@ -118,7 +125,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       return true; // 'all'
     });
-  }, [attendanceLogs, currentSelectedYear, selectedSemester]);
+  }, [attendanceLogs, currentSelectedYear, selectedSemester, calendarEntries]);
 
   // Calculate Attendance Metrics for the entire school in selected semester
   const attendanceMetrics = useMemo(() => {

@@ -1,4 +1,4 @@
-import { DayOfWeek } from '../types';
+import { DayOfWeek, SchoolCalendarEntry } from '../types';
 
 export const THAI_MONTHS_SHORT = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
@@ -147,5 +147,106 @@ export function getAcademicYearMonths(activeYear?: {
   }
 
   return results;
+}
+
+export function parseISODateLocal(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    const y = Number(parts[0]);
+    const m = Number(parts[1]) - 1;
+    const d = Number(parts[2]);
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+      return new Date(y, m, d);
+    }
+  }
+  const fallback = new Date(dateStr);
+  return isNaN(fallback.getTime()) ? null : fallback;
+}
+
+export function isWeekendDate(dateStr: string): boolean {
+  const d = parseISODateLocal(dateStr);
+  if (!d) return false;
+  const day = d.getDay();
+  return day === 0 || day === 6;
+}
+
+export function getThaiWeekdayName(dateStr: string): string {
+  const d = parseISODateLocal(dateStr);
+  if (!d) return '';
+  const day = d.getDay();
+  if (day === 0) return 'อาทิตย์';
+  if (day === 6) return 'เสาร์';
+  return THAI_DAYS[day] || '';
+}
+
+export interface ResolvedCalendarDate {
+  date: string;
+  isWeekend: boolean;
+  isHoliday: boolean;
+  isOpenedNormal: boolean;
+  isCustomHoliday: boolean;
+  holidayTitle: string;
+  effectiveDayOfWeek: DayOfWeek | null;
+  entry?: SchoolCalendarEntry;
+}
+
+export function resolveCalendarDateStatus(
+  dateStr: string,
+  calendarEntries: SchoolCalendarEntry[] = []
+): ResolvedCalendarDate {
+  const d = parseISODateLocal(dateStr);
+  const dayNum = d ? d.getDay() : -1;
+  const isWeekend = dayNum === 0 || dayNum === 6;
+  const naturalDayOfWeek = dayNum >= 0 ? (THAI_DAYS[dayNum] || null) : null;
+  const entry = calendarEntries.find((e) => e.date === dateStr);
+
+  if (entry?.type === 'holiday') {
+    return {
+      date: dateStr,
+      isWeekend,
+      isHoliday: true,
+      isOpenedNormal: false,
+      isCustomHoliday: true,
+      holidayTitle: entry.title || 'วันหยุดราชการ',
+      effectiveDayOfWeek: null,
+      entry
+    };
+  }
+
+  if (entry?.type === 'normal') {
+    return {
+      date: dateStr,
+      isWeekend,
+      isHoliday: false,
+      isOpenedNormal: true,
+      isCustomHoliday: false,
+      holidayTitle: entry.title || 'เปิดเรียนปกติ',
+      effectiveDayOfWeek: entry.transferDayOfWeek || naturalDayOfWeek,
+      entry
+    };
+  }
+
+  if (isWeekend) {
+    return {
+      date: dateStr,
+      isWeekend: true,
+      isHoliday: true,
+      isOpenedNormal: false,
+      isCustomHoliday: false,
+      holidayTitle: dayNum === 0 ? 'วันหยุดสุดสัปดาห์ (วันอาทิตย์)' : 'วันหยุดสุดสัปดาห์ (วันเสาร์)',
+      effectiveDayOfWeek: null
+    };
+  }
+
+  return {
+    date: dateStr,
+    isWeekend: false,
+    isHoliday: false,
+    isOpenedNormal: false,
+    isCustomHoliday: false,
+    holidayTitle: '',
+    effectiveDayOfWeek: naturalDayOfWeek
+  };
 }
 

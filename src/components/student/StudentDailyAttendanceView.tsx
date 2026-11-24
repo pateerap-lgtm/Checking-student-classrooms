@@ -16,8 +16,8 @@ import {
   School,
   Check
 } from 'lucide-react';
-import { Student, AttendanceLog, Subject, Period, Classroom, AcademicYear, SystemSettings } from '../../types';
-import { formatToThaiBE, formatThaiFullDate, getDayOfWeekFromDate, getTodayISODate } from '../../utils/thaiDate';
+import { Student, AttendanceLog, Subject, Period, Classroom, AcademicYear, SystemSettings, SchoolCalendarEntry } from '../../types';
+import { formatToThaiBE, formatThaiFullDate, getDayOfWeekFromDate, getTodayISODate, resolveCalendarDateStatus } from '../../utils/thaiDate';
 
 interface StudentDailyAttendanceViewProps {
   currentStudent: Student;
@@ -25,6 +25,7 @@ interface StudentDailyAttendanceViewProps {
   subjects: Subject[];
   periods: Period[];
   classes: Classroom[];
+  calendarEntries?: SchoolCalendarEntry[];
   activeYear?: AcademicYear;
   settings: SystemSettings;
 }
@@ -35,6 +36,7 @@ export const StudentDailyAttendanceView: React.FC<StudentDailyAttendanceViewProp
   subjects,
   periods,
   classes,
+  calendarEntries = [],
   activeYear,
   settings
 }) => {
@@ -65,8 +67,14 @@ export const StudentDailyAttendanceView: React.FC<StudentDailyAttendanceViewProp
   // Filter state for status
   const [statusFilter, setStatusFilter] = useState<'all' | 'present' | 'absent' | 'late' | 'leave'>('all');
 
-  // Logs for the selected date
+  const dateCalendarStatus = useMemo(
+    () => resolveCalendarDateStatus(selectedDate, calendarEntries),
+    [selectedDate, calendarEntries]
+  );
+
+  // Logs for the selected date (empty if holiday)
   const dayLogs = useMemo(() => {
+    if (dateCalendarStatus.isHoliday) return [];
     return studentLogs
       .filter((log) => log.date === selectedDate)
       .sort((a, b) => {
@@ -74,7 +82,7 @@ export const StudentDailyAttendanceView: React.FC<StudentDailyAttendanceViewProp
         const pB = periods.find((p) => p.name === b.periodName)?.order || 0;
         return pA - pB;
       });
-  }, [studentLogs, selectedDate, periods]);
+  }, [studentLogs, selectedDate, periods, dateCalendarStatus.isHoliday]);
 
   // Day summary statistics
   const dayStats = useMemo(() => {
@@ -246,7 +254,9 @@ export const StudentDailyAttendanceView: React.FC<StudentDailyAttendanceViewProp
               {currentStudent.name} (ชั้น {currentStudent.className} เลขที่ {currentStudent.seq || 1})
             </h2>
             <p className="text-xs sm:text-sm text-teal-100">
-              {dayStats.total > 0
+              {dateCalendarStatus.isHoliday
+                ? `${dateCalendarStatus.holidayTitle} (วันหยุดราชการ/วันหยุดประจำสัปดาห์ งดการเรียนการสอน)`
+                : dayStats.total > 0
                 ? dayStats.absent === 0 && dayStats.sick === 0 && dayStats.leave === 0
                   ? '✨ เข้าเรียนครบถ้วนสมบูรณ์ทุกคาบในวันนี้'
                   : `บันทึกเวลาเรียนแล้ว ${dayStats.total} คาบ (มา ${dayStats.present}, ขาด ${dayStats.absent}, สาย ${dayStats.late}, ลา ${dayStats.sick + dayStats.leave})`

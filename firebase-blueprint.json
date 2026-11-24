@@ -156,6 +156,21 @@
         "academicYearId": { "type": "string" }
       },
       "required": ["curriculumId", "code", "name", "periodsPerWeek"]
+    },
+    "SchoolCalendarEntry": {
+      "title": "SchoolCalendarEntry",
+      "description": "School calendar overrides for public holidays, opened weekend classes, and schedule transfers",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "type": { "type": "string", "enum": ["holiday", "normal"] },
+        "title": { "type": "string" },
+        "transferDayOfWeek": { "type": "string" },
+        "transferredFromDate": { "type": "string" },
+        "academicYearId": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["date", "type", "title"]
     }
   },
   "firestore": {
@@ -202,6 +217,10 @@
     "/curriculumSubjects/{curriculumSubjectId}": {
       "schema": "CurriculumSubject",
       "description": "Subjects under each curriculum"
+    },
+    "/schoolCalendar/{entryId}": {
+      "schema": "SchoolCalendarEntry",
+      "description": "School calendar holiday and opened normal day overrides"
     }
   }
 }
