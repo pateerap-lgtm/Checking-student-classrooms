@@ -87,13 +87,12 @@
       "properties": {
         "code": { "type": "string" },
         "name": { "type": "string" },
-        "type": { "type": "string", "enum": ["พื้นฐาน", "เพิ่มเติม", "พัฒนาผู้เรียน"] },
         "periodsPerWeek": { "type": "number" },
         "classId": { "type": "string" },
         "className": { "type": "string" },
         "academicYearId": { "type": "string" }
       },
-      "required": ["code", "name", "type", "periodsPerWeek"]
+      "required": ["code", "name", "periodsPerWeek"]
     },
     "TeachingAssignment": {
       "title": "TeachingAssignment",

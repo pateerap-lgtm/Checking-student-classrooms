@@ -776,9 +776,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
               </strong>
             </div>
             <div>
-              <span className="text-slate-500">ประเภทวิชา: </span>
-              <span>{currentSubject?.type || '-'}</span>
-              <span className="text-slate-500 ml-3">จำนวน: </span>
+              <span className="text-slate-500">จำนวน: </span>
               <span>{currentSubject?.periodsPerWeek || '-'} คาบ/สัปดาห์</span>
             </div>
             <div>
@@ -1436,7 +1434,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
                     ) : (
                       teacherSubjects.map((s) => (
                         <option key={s.id} value={s.id}>
-                          {s.code} {s.name} ({s.type})
+                          {s.code} {s.name}
                         </option>
                       ))
                     )}

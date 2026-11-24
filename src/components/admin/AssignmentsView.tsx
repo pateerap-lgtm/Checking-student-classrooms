@@ -1558,7 +1558,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                       }
                       return (
                         <option key={s.id} value={s.id}>
-                          {s.code} {s.name} ({s.type}){badgeNote}
+                          {s.code} {s.name}{badgeNote}
                         </option>
                       );
                     })

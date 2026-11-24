@@ -236,28 +236,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     ];
   }, [attendanceMetrics]);
 
-  // Categorize subjects
-  const coreSubjects = subjects.filter((s) => s.type === 'พื้นฐาน');
-  const electiveSubjects = subjects.filter((s) => s.type === 'เพิ่มเติม');
-  const activitySubjects = subjects.filter((s) => s.type === 'พัฒนาผู้เรียน');
+  // Subject totals summary
+  const totalWeeklyPeriods = subjects.reduce((sum, s) => sum + (Number(s.periodsPerWeek) || 0), 0);
+  const classesWithSubjectsCount = new Set(subjects.map((s) => s.classId).filter(Boolean)).size;
 
   const teachersCount = users.filter((u) => u.role === 'teacher').length;
 
   useEffect(() => {
-    // Subject Chart (Donut)
+    // Subject Chart (Donut by Classroom)
     if (subjectChartRef.current) {
       if (subjectChartInstance.current) {
         subjectChartInstance.current.destroy();
       }
 
+      const subjectClassLabels = classes.map((c) => c.name);
+      const subjectClassCounts = classes.map(
+        (c) => subjects.filter((s) => s.classId === c.id || s.className === c.name).length
+      );
+      const subjectClassColors = classes.map((c) => c.color || '#0C7C82');
+
       subjectChartInstance.current = new Chart(subjectChartRef.current, {
         type: 'doughnut',
         data: {
-          labels: ['วิชาพื้นฐาน', 'วิชาเพิ่มเติม', 'กิจกรรมพัฒนาผู้เรียน'],
+          labels: subjectClassLabels.length > 0 ? subjectClassLabels : ['ไม่มีข้อมูล'],
           datasets: [
             {
-              data: [coreSubjects.length, electiveSubjects.length, activitySubjects.length],
-              backgroundColor: ['#0C7C82', '#35B4B0', '#AED581'],
+              data: subjectClassCounts.length > 0 ? subjectClassCounts : [0],
+              backgroundColor: subjectClassColors.length > 0 ? subjectClassColors : ['#cbd5e1'],
               borderWidth: 2,
               borderColor: '#ffffff',
             },
@@ -333,7 +338,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (subjectChartInstance.current) subjectChartInstance.current.destroy();
       if (attendanceChartInstance.current) attendanceChartInstance.current.destroy();
     };
-  }, [subjects, classes, students, coreSubjects.length, electiveSubjects.length, activitySubjects.length]);
+  }, [subjects, classes, students]);
 
   return (
     <div className="space-y-6">
@@ -492,9 +497,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {subjects.length} <span className="text-sm font-normal text-slate-500">วิชา</span>
           </div>
           <div className="text-xs text-slate-500 flex items-center justify-between pt-2 border-t border-slate-50">
-            <span>พื้นฐาน {coreSubjects.length}</span>
-            <span>• เพิ่มเติม {electiveSubjects.length}</span>
-            <span>• พัฒนาผู้เรียน {activitySubjects.length}</span>
+            <span>รวม {totalWeeklyPeriods} คาบ/สัปดาห์</span>
+            <span>• {classesWithSubjectsCount} ชั้นเรียน</span>
           </div>
         </div>
 
@@ -1144,8 +1148,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-bold text-slate-800 text-base">สัดส่วนประเภทรายวิชา</h3>
-              <p className="text-xs text-slate-500">สัดส่วนตามกลุ่มสาระพื้นฐาน เพิ่มเติม และกิจกรรม</p>
+              <h3 className="font-bold text-slate-800 text-base">จำนวนรายวิชาในแต่ละชั้นเรียน</h3>
+              <p className="text-xs text-slate-500">สัดส่วนจำนวนรายวิชาที่เปิดสอนจำแนกตามชั้นเรียน</p>
             </div>
             <span className="text-xs px-2.5 py-1 rounded-full bg-teal-50 text-[#0C7C82] font-semibold">
               Chart.js

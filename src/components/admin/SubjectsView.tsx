@@ -13,7 +13,7 @@ import {
   Check,
   Copy
 } from 'lucide-react';
-import { Subject, SubjectType, Classroom, AcademicYear, Curriculum, CurriculumSubject } from '../../types';
+import { Subject, Classroom, AcademicYear, Curriculum, CurriculumSubject } from '../../types';
 import { exportToExcel, parseExcelFile, downloadSubjectTemplate } from '../../utils/excel';
 import { Pagination } from '../common/Pagination';
 
@@ -58,7 +58,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
   // Form fields (single add/edit modal)
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
-  const [type, setType] = useState<SubjectType>('พื้นฐาน');
   const [periodsPerWeek, setPeriodsPerWeek] = useState<number>(2);
   const [targetClassId, setTargetClassId] = useState<string>(classes[0]?.id || '');
   const [modalCurriculumId, setModalCurriculumId] = useState<string>('');
@@ -79,15 +78,12 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
   const [pickerCurriculumId, setPickerCurriculumId] = useState<string>(curriculums[0]?.id || '');
   const [pickerSearch, setPickerSearch] = useState('');
   const [selectedCurrSubIds, setSelectedCurrSubIds] = useState<string[]>([]);
-  const [pickerSubjectTypes, setPickerSubjectTypes] = useState<Record<string, SubjectType>>({});
-  const [pickerDefaultType, setPickerDefaultType] = useState<SubjectType>('พื้นฐาน');
   const [isSavingPicker, setIsSavingPicker] = useState(false);
 
   const openAddModal = () => {
     setEditingSubject(null);
     setCode('');
     setName('');
-    setType('พื้นฐาน');
     setPeriodsPerWeek(2);
     setTargetClassId(selectedClassId !== 'all' ? selectedClassId : classes[0]?.id || '');
     setModalCurriculumId(curriculums[0]?.id || '');
@@ -100,7 +96,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
     setEditingSubject(sub);
     setCode(sub.code);
     setName(sub.name);
-    setType(sub.type);
     setPeriodsPerWeek(sub.periodsPerWeek);
     setTargetClassId(sub.classId);
     setModalCurriculumId(curriculums[0]?.id || '');
@@ -233,7 +228,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
       .map((s) => ({
         code: s.code.trim(),
         name: s.name.trim(),
-        type: s.type,
         periodsPerWeek: Math.max(1, Number(s.periodsPerWeek) || 1),
         classId: targetClass.id,
         className: targetClass.name,
@@ -299,8 +293,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
     setPickerCurriculumId(initCurrId);
     setPickerSearch('');
     setSelectedCurrSubIds([]);
-    setPickerSubjectTypes({});
-    setPickerDefaultType('พื้นฐาน');
     setIsPickerOpen(true);
   };
 
@@ -336,15 +328,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
     }
   };
 
-  const handleApplyDefaultTypeToAll = (newType: SubjectType) => {
-    setPickerDefaultType(newType);
-    const updated: Record<string, SubjectType> = { ...pickerSubjectTypes };
-    pickerCurriculumSubjects.forEach((cs) => {
-      updated[cs.id] = newType;
-    });
-    setPickerSubjectTypes(updated);
-  };
-
   const handleSaveFromCurriculum = async () => {
     const classObj = classes.find((c) => c.id === pickerClassId);
     if (!classObj) {
@@ -363,7 +346,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
       .map((cs) => ({
         code: cs.code.trim(),
         name: cs.name.trim(),
-        type: pickerSubjectTypes[cs.id] || pickerDefaultType,
         periodsPerWeek: Math.max(1, Number(cs.periodsPerWeek) || 1),
         classId: classObj.id,
         className: classObj.name,
@@ -401,7 +383,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
         await onUpdateSubject(editingSubject.id, {
           code: code.trim(),
           name: name.trim(),
-          type,
           periodsPerWeek: Number(periodsPerWeek),
           classId: classObj.id,
           className: classObj.name
@@ -431,7 +412,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
       const toAdd: Omit<Subject, 'id'>[] = modalNewCurriculumSubjects.map((cs) => ({
         code: cs.code.trim(),
         name: cs.name.trim(),
-        type: 'พื้นฐาน',
         periodsPerWeek: Math.max(1, Number(cs.periodsPerWeek) || 1),
         classId: classObj.id,
         className: classObj.name,
@@ -464,7 +444,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
       await onAddSubject({
         code: selectedModalCurrSubject.code.trim(),
         name: selectedModalCurrSubject.name.trim(),
-        type: 'พื้นฐาน',
         periodsPerWeek: Math.max(1, Number(selectedModalCurrSubject.periodsPerWeek) || 1),
         classId: classObj.id,
         className: classObj.name,
@@ -499,7 +478,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
       'ลำดับ': idx + 1,
       'รหัสวิชา': s.code,
       'ชื่อวิชา': s.name,
-      'ประเภทวิชา': s.type,
       'คาบสอนต่อสัปดาห์': s.periodsPerWeek,
       'ชั้นเรียน': s.className
     }));
@@ -520,18 +498,12 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
 
       const defaultClass = classes[0];
       const imported: Omit<Subject, 'id'>[] = parsedData.map((row: any) => {
-        const rawType = String(row['ประเภทวิชา(พื้นฐาน/เพิ่มเติม/พัฒนาผู้เรียน)'] || row['ประเภทวิชา'] || 'พื้นฐาน');
-        let mappedType: SubjectType = 'พื้นฐาน';
-        if (rawType.includes('เพิ่ม')) mappedType = 'เพิ่มเติม';
-        else if (rawType.includes('พัฒนา') || rawType.includes('กิจกรรม')) mappedType = 'พัฒนาผู้เรียน';
-
         const rowClassName = String(row['ชั้นเรียน'] || '').trim();
         const matchedClass = classes.find((c) => c.name === rowClassName) || defaultClass;
 
         return {
           code: String(row['รหัสวิชา'] || '').trim(),
           name: String(row['ชื่อวิชา'] || '').trim(),
-          type: mappedType,
           periodsPerWeek: Number(row['คาบสอนต่อสัปดาห์'] || row['คาบสอน'] || 2),
           classId: matchedClass?.id || 'c1',
           className: matchedClass?.name || 'ม.1/1',
@@ -567,17 +539,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
     setCurrentPage(1);
   }, [searchTerm, selectedClassId]);
 
-  const getTypeBadge = (t: SubjectType) => {
-    switch (t) {
-      case 'พื้นฐาน':
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-800">พื้นฐาน</span>;
-      case 'เพิ่มเติม':
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-cyan-100 text-cyan-800">เพิ่มเติม</span>;
-      default:
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-lime-100 text-lime-800">พัฒนาผู้เรียน</span>;
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Header & Filter */}
@@ -589,7 +550,7 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
               <span>จัดการรายวิชา (Curriculum Subjects)</span>
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              กำหนดรหัสวิชา ชื่อวิชา ประเภท (พื้นฐาน, เพิ่มเติม, พัฒนาผู้เรียน) และจำนวนคาบสอน
+              กำหนดรหัสวิชา ชื่อวิชา และจำนวนคาบสอน
             </p>
           </div>
 
@@ -703,7 +664,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                 <th className="py-4 px-6">รหัสวิชา</th>
                 <th className="py-4 px-6">ชื่อวิชา</th>
                 <th className="py-4 px-6 text-center">ชั้นเรียน</th>
-                <th className="py-4 px-6 text-center">ประเภทวิชา</th>
                 <th className="py-4 px-6 text-center">คาบสอน/สัปดาห์</th>
                 <th className="py-4 px-6 text-right">จัดการ</th>
               </tr>
@@ -711,7 +671,7 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
             <tbody className="divide-y divide-slate-100 text-sm">
               {filteredSubjects.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
+                  <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
                     ไม่พบรายวิชาตามเงื่อนไขที่เลือก คลิก "เพิ่มรายวิชา" เพื่อเพิ่มข้อมูล
                   </td>
                 </tr>
@@ -730,7 +690,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                         {s.className}
                       </span>
                     </td>
-                    <td className="py-4 px-6 text-center">{getTypeBadge(s.type)}</td>
                     <td className="py-4 px-6 text-center font-bold text-slate-700">
                       {s.periodsPerWeek} คาบ
                     </td>
@@ -790,7 +749,7 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
             </div>
 
             {/* Selection Controls */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 shrink-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 shrink-0">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
                   1. เลือกชั้นเรียน <span className="text-red-500">*</span>
@@ -822,21 +781,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                       {curr.name} ({curriculumSubjects.filter((cs) => cs.curriculumId === curr.id).length} วิชา)
                     </option>
                   ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  ประเภทวิชาเริ่มต้น
-                </label>
-                <select
-                  value={pickerDefaultType}
-                  onChange={(e) => handleApplyDefaultTypeToAll(e.target.value as SubjectType)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] text-sm bg-white"
-                >
-                  <option value="พื้นฐาน">รายวิชาพื้นฐาน</option>
-                  <option value="เพิ่มเติม">รายวิชาเพิ่มเติม</option>
-                  <option value="พัฒนาผู้เรียน">กิจกรรมพัฒนาผู้เรียน</option>
                 </select>
               </div>
             </div>
@@ -879,13 +823,12 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                     <th className="py-3 px-4">รหัสวิชา</th>
                     <th className="py-3 px-4">ชื่อวิชา</th>
                     <th className="py-3 px-4 text-center">คาบ/สัปดาห์</th>
-                    <th className="py-3 px-4 text-center">ประเภทวิชา</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
                   {pickerCurriculumSubjects.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-10 text-center text-slate-400 text-xs">
+                      <td colSpan={4} className="py-10 text-center text-slate-400 text-xs">
                         ไม่พบรายวิชาในหลักสูตรที่เลือก กรุณาเพิ่มรายวิชาในเมนู "หลักสูตร"
                       </td>
                     </tr>
@@ -893,7 +836,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                     pickerCurriculumSubjects.map((cs) => {
                       const alreadyAdded = existingCodesInPickerClass.has(cs.code.trim().toLowerCase());
                       const isChecked = selectedCurrSubIds.includes(cs.id);
-                      const rowType = pickerSubjectTypes[cs.id] || pickerDefaultType;
                       return (
                         <tr
                           key={cs.id}
@@ -933,26 +875,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                           </td>
                           <td className="py-3 px-4 text-center font-bold text-slate-700">
                             {cs.periodsPerWeek} คาบ
-                          </td>
-                          <td
-                            className="py-3 px-4 text-center"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <select
-                              value={rowType}
-                              disabled={alreadyAdded}
-                              onChange={(e) =>
-                                setPickerSubjectTypes((prev) => ({
-                                  ...prev,
-                                  [cs.id]: e.target.value as SubjectType
-                                }))
-                              }
-                              className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs bg-white disabled:bg-slate-100"
-                            >
-                              <option value="พื้นฐาน">พื้นฐาน</option>
-                              <option value="เพิ่มเติม">เพิ่มเติม</option>
-                              <option value="พัฒนาผู้เรียน">พัฒนาผู้เรียน</option>
-                            </select>
                           </td>
                         </tr>
                       );
@@ -1091,14 +1013,13 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                         <th className="py-3 px-4 text-center w-12">เลือก</th>
                         <th className="py-3 px-4">รหัสวิชา</th>
                         <th className="py-3 px-4">ชื่อวิชา</th>
-                        <th className="py-3 px-4 text-center">ประเภท</th>
                         <th className="py-3 px-4 text-center">คาบ/สัปดาห์</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
                       {sourceClassSubjects.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="py-10 text-center text-slate-400 text-xs">
+                          <td colSpan={4} className="py-10 text-center text-slate-400 text-xs">
                             ชั้นเรียนต้นทางยังไม่มีรายวิชา
                           </td>
                         </tr>
@@ -1143,7 +1064,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                                   )}
                                 </div>
                               </td>
-                              <td className="py-3 px-4 text-center">{getTypeBadge(s.type)}</td>
                               <td className="py-3 px-4 text-center font-bold text-slate-700">
                                 {s.periodsPerWeek} คาบ
                               </td>
@@ -1383,21 +1303,6 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
                       required
                       className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] text-sm"
                     />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
-                      ประเภทวิชา <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={type}
-                      onChange={(e) => setType(e.target.value as SubjectType)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] text-sm bg-white"
-                    >
-                      <option value="พื้นฐาน">รายวิชาพื้นฐาน</option>
-                      <option value="เพิ่มเติม">รายวิชาเพิ่มเติม</option>
-                      <option value="พัฒนาผู้เรียน">กิจกรรมพัฒนาผู้เรียน</option>
-                    </select>
                   </div>
 
                   <div>

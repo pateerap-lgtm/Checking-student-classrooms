@@ -58,13 +58,10 @@ export interface Student {
   academicYearId?: string;
 }
 
-export type SubjectType = 'พื้นฐาน' | 'เพิ่มเติม' | 'พัฒนาผู้เรียน';
-
 export interface Subject {
   id: string;
   code: string; // e.g. "ว21101"
   name: string; // e.g. "วิทยาศาสตร์ 1"
-  type: SubjectType;
   periodsPerWeek: number;
   classId: string;
   className: string;
