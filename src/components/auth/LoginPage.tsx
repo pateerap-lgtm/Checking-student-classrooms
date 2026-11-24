@@ -11,6 +11,8 @@ interface LoginPageProps {
   isLoadingData: boolean;
 }
 
+const REMEMBER_CREDENTIALS_KEY = 'school_attendance_remembered_credentials';
+
 export const LoginPage: React.FC<LoginPageProps> = ({
   settings,
   users,
@@ -19,10 +21,45 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   onLoginSuccess,
   isLoadingData
 }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [initialSaved] = useState<{ username: string; password: string; remember: boolean }>(() => {
+    try {
+      const raw = localStorage.getItem(REMEMBER_CREDENTIALS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.username === 'string' && typeof parsed.password === 'string') {
+          return {
+            username: parsed.username,
+            password: parsed.password,
+            remember: true
+          };
+        }
+      }
+    } catch {
+      // Ignore malformed storage data
+    }
+    return { username: '', password: '', remember: false };
+  });
+
+  const [username, setUsername] = useState(initialSaved.username);
+  const [password, setPassword] = useState(initialSaved.password);
+  const [rememberMe, setRememberMe] = useState(initialSaved.remember);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const syncRememberedCredentials = (shouldRemember: boolean, userVal: string, passVal: string) => {
+    try {
+      if (shouldRemember) {
+        localStorage.setItem(
+          REMEMBER_CREDENTIALS_KEY,
+          JSON.stringify({ username: userVal, password: passVal })
+        );
+      } else {
+        localStorage.removeItem(REMEMBER_CREDENTIALS_KEY);
+      }
+    } catch {
+      // Ignore storage quota / privacy mode errors
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,6 +85,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       );
 
       if (foundUser) {
+        syncRememberedCredentials(rememberMe, trimmedUser, trimmedPass);
         setIsSubmitting(false);
         onLoginSuccess({
           username: foundUser.username,
@@ -64,6 +102,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       );
 
       if (foundStudent) {
+        syncRememberedCredentials(rememberMe, trimmedUser, trimmedPass);
         setIsSubmitting(false);
         onLoginSuccess({
           username: foundStudent.username,
@@ -174,6 +213,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
                   placeholder="เช่น admin, teacher1, std01"
                   className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] focus:border-transparent text-sm text-slate-800 transition-all bg-slate-50/50 hover:bg-white"
                   required
@@ -193,11 +233,32 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
                   placeholder="••••••••"
                   className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] focus:border-transparent text-sm text-slate-800 transition-all bg-slate-50/50 hover:bg-white"
                   required
                 />
               </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-0.5">
+              <label className="inline-flex items-center gap-2.5 cursor-pointer select-none group">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setRememberMe(checked);
+                    if (!checked) {
+                      syncRememberedCredentials(false, '', '');
+                    }
+                  }}
+                  className="w-4 h-4 rounded border-slate-300 text-[#0C7C82] focus:ring-[#0C7C82] cursor-pointer accent-[#0C7C82]"
+                />
+                <span className="text-sm text-slate-600 group-hover:text-slate-800 font-medium transition-colors">
+                  จำชื่อผู้ใช้และรหัสผ่าน
+                </span>
+              </label>
             </div>
 
             <div className="pt-2">
