@@ -631,15 +631,25 @@ export default function App() {
   };
 
   const handleImportSubjects = async (newSubjects: Omit<Subject, 'id'>[]) => {
-    const batch = writeBatch(db);
-    newSubjects.forEach((s, idx) => {
-      const id = `sub_imp_${Date.now()}_${idx}`;
-      batch.set(doc(db, 'subjects', id), {
-        ...s,
-        academicYearId: s.academicYearId || activeYear?.id || 'year_2569'
-      });
-    });
-    await batch.commit();
+    try {
+      if (newSubjects.length === 0) return;
+      for (let i = 0; i < newSubjects.length; i += 400) {
+        const chunk = newSubjects.slice(i, i + 400);
+        const batch = writeBatch(db);
+        chunk.forEach((s, idx) => {
+          const id = `sub_imp_${Date.now()}_${i + idx}`;
+          batch.set(doc(db, 'subjects', id), {
+            ...s,
+            academicYearId: s.academicYearId || activeYear?.id || 'year_2569'
+          });
+        });
+        await batch.commit();
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'subjects');
+      showToast('error', 'เกิดข้อผิดพลาดในการบันทึกรายวิชา');
+      throw err;
+    }
   };
 
   // Curriculums & Curriculum Subjects mutations
@@ -1158,6 +1168,8 @@ export default function App() {
                     <SubjectsView
                       subjects={currentYearSubjects}
                       classes={currentYearClasses}
+                      curriculums={currentYearCurriculums}
+                      curriculumSubjects={currentYearCurriculumSubjects}
                       activeYear={activeYear}
                       onAddSubject={handleAddSubject}
                       onUpdateSubject={handleUpdateSubject}
