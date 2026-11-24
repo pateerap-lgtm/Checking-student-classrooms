@@ -33,6 +33,7 @@ import {
   SystemSettings
 } from '../../types';
 import { Pagination } from '../common/Pagination';
+import { getTodayISODate } from '../../utils/thaiDate';
 
 interface AssignmentsViewProps {
   assignments: TeachingAssignment[];
@@ -134,6 +135,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
 
   // Form states
   const [teacherUsername, setTeacherUsername] = useState(teachers[0]?.username || '');
+  const [isSubstituteEnabled, setIsSubstituteEnabled] = useState(false);
+  const [substituteTeacherUsername, setSubstituteTeacherUsername] = useState('');
+  const [substituteDate, setSubstituteDate] = useState('');
   const [classId, setClassId] = useState(classes[0]?.id || '');
   const [subjectId, setSubjectId] = useState('');
   const [periodId, setPeriodId] = useState(periods.find((p) => !p.isLunchBreak)?.id || '');
@@ -147,6 +151,45 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
 
   // Available teaching periods (excluding lunch break)
   const teachingPeriods = useMemo(() => periods.filter((p) => !p.isLunchBreak), [periods]);
+
+  // Calculate teachers who have a FREE PERIOD (คาบว่าง / คาบตรงกัน) on dayOfWeek during periodId..endPeriodId
+  // Excludes the primary teacher (ไม่แสดงชื่อตนเอง)
+  const availableSubstituteTeachers = useMemo(() => {
+    if (!teacherUsername) return [];
+
+    const startIdx = teachingPeriods.findIndex((p) => p.id === periodId);
+    const endIdx = teachingPeriods.findIndex((p) => p.id === endPeriodId);
+    const targetStart = startIdx !== -1 ? startIdx : 0;
+    const targetEnd = endIdx !== -1 && endIdx >= targetStart ? endIdx : targetStart;
+    const targetPeriodIds = teachingPeriods.slice(targetStart, targetEnd + 1).map((p) => p.id);
+
+    return teachers.filter((t) => {
+      // Exclude primary teacher (ไม่แสดงชื่อตนเองด้วย)
+      if (t.username === teacherUsername) return false;
+
+      // Check if teacher t has any conflicting assignment on dayOfWeek during overlapping periods
+      const hasConflict = assignments.some((a) => {
+        if (editingAssignment?.id && a.id === editingAssignment.id) return false;
+        if (a.dayOfWeek !== dayOfWeek) return false;
+
+        const isTeacher = a.teacherUsername === t.username || a.substituteTeacherUsername === t.username;
+        if (!isTeacher) return false;
+
+        const aStartIdx = teachingPeriods.findIndex((p) => p.id === a.periodId);
+        const aEndIdx = a.endPeriodId
+          ? teachingPeriods.findIndex((p) => p.id === a.endPeriodId)
+          : aStartIdx;
+        const realAStart = aStartIdx !== -1 ? aStartIdx : 0;
+        const realAEnd = aEndIdx !== -1 && aEndIdx >= realAStart ? aEndIdx : realAStart;
+        const aPeriodIds = teachingPeriods.slice(realAStart, realAEnd + 1).map((p) => p.id);
+
+        return targetPeriodIds.some((pId) => aPeriodIds.includes(pId));
+      });
+
+      // Include ONLY teachers who have NO conflict during this period slot (they have a free period / คาบว่าง)
+      return !hasConflict;
+    });
+  }, [teachers, teacherUsername, dayOfWeek, periodId, endPeriodId, teachingPeriods, assignments, editingAssignment]);
 
   // Filter subjects STRICTLY by selected classroom
   const selectedClass = classes.find((c) => c.id === classId || c.name === classId);
@@ -521,6 +564,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
 
     setEditingAssignment(null);
     setTeacherUsername(selectedTeacher);
+    setIsSubstituteEnabled(false);
+    setSubstituteTeacherUsername('');
+    setSubstituteDate(getTodayISODate());
     setClassId(initialClassId);
     setSubjectId(firstSub?.id || '');
     setPeriodId(targetPeriodId);
@@ -533,6 +579,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   const openEditModal = (a: TeachingAssignment) => {
     setEditingAssignment(a);
     setTeacherUsername(a.teacherUsername);
+    setIsSubstituteEnabled(!!a.substituteTeacherUsername);
+    setSubstituteTeacherUsername(a.substituteTeacherUsername || '');
+    setSubstituteDate(a.substituteDate || getTodayISODate());
     setClassId(a.classId);
     setSubjectId(a.subjectId);
     setPeriodId(a.periodId);
@@ -638,6 +687,17 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
       ? `${startPer.name} ถึง ${endPer.name} (${startPer.startTime}-${endPer.endTime})`
       : `${startPer.name} (${startPer.startTime}-${startPer.endTime})`;
 
+    if (isSubstituteEnabled) {
+      if (!substituteTeacherUsername) {
+        showToast?.('warning', 'กรุณาเลือกครูผู้สอนแทน');
+        return;
+      }
+      if (!substituteDate) {
+        showToast?.('warning', 'กรุณาระบุวันที่ต้องการให้สอนแทน');
+        return;
+      }
+    }
+
     setIsSaving(true);
     try {
       if (editingAssignment) {
@@ -653,7 +713,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
           endPeriodId: endPer?.id || startPer.id,
           periodName: computedPeriodName,
           dayOfWeek,
-          color
+          color,
+          substituteTeacherUsername: isSubstituteEnabled ? substituteTeacherUsername : '',
+          substituteDate: isSubstituteEnabled ? substituteDate : ''
         });
       } else {
         await onAddAssignment({
@@ -669,7 +731,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
           periodName: computedPeriodName,
           dayOfWeek,
           color,
-          academicYearId: activeYear?.id || 'year_2569'
+          academicYearId: activeYear?.id || 'year_2569',
+          substituteTeacherUsername: isSubstituteEnabled ? substituteTeacherUsername : '',
+          substituteDate: isSubstituteEnabled ? substituteDate : ''
         });
       }
       setIsModalOpen(false);
@@ -1103,6 +1167,11 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                                 <div className="text-[11px] text-slate-700 font-medium line-clamp-2 leading-tight mt-0.5">
                                   {assignment.subjectName}
                                 </div>
+                                {assignment.substituteTeacherUsername && (
+                                  <div className="mt-1 font-bold text-[10px] text-amber-900 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded-md inline-block">
+                                    สอนแทน: {teachers.find((t) => t.username === assignment.substituteTeacherUsername)?.fullName || assignment.substituteTeacherUsername}
+                                  </div>
+                                )}
                               </div>
                             </div>
 
@@ -1253,6 +1322,13 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                         </div>
                         <span className="group-hover:underline">{a.teacherName}</span>
                       </button>
+                      {a.substituteTeacherUsername && (
+                        <div className="mt-1.5 text-[11px] text-amber-800 font-medium">
+                          <span className="px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200">
+                            สอนแทนโดย: {teachers.find((t) => t.username === a.substituteTeacherUsername)?.fullName || a.substituteTeacherUsername}
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td className="py-4 px-6 font-semibold text-slate-700">
                       วัน{a.dayOfWeek}
@@ -1343,6 +1419,89 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Checkbox & Details: จัดสอนแทน */}
+              <div className="p-3.5 rounded-2xl bg-teal-50/50 border border-teal-200/80 space-y-3">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isSubstituteEnabled}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsSubstituteEnabled(checked);
+                      if (!checked) {
+                        setSubstituteTeacherUsername('');
+                        setSubstituteDate('');
+                      } else {
+                        if (!substituteDate) setSubstituteDate(getTodayISODate());
+                      }
+                    }}
+                    className="w-4 h-4 rounded text-[#0C7C82] focus:ring-[#0C7C82] border-slate-300 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 block">
+                      ต้องการจัดสอนแทน (ระบุครูสอนแทน)
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-normal block">
+                      เลือกครูผู้สอนแทนที่มีคาบว่างและกำหนดวันที่สอนแทน
+                    </span>
+                  </div>
+                </label>
+
+                {/* When Checkbox is checked: Show Date Picker and Filtered Teacher List */}
+                {isSubstituteEnabled && (
+                  <div className="pt-3 border-t border-teal-200/60 space-y-3 animate-fade-in">
+                    {/* Date Picker: วันที่ต้องการให้สอนแทน */}
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
+                        วันที่ต้องการให้สอนแทน <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={substituteDate}
+                        onChange={(e) => setSubstituteDate(e.target.value)}
+                        required={isSubstituteEnabled}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-white font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Select Substitute Teacher (filtered: free periods only & exclude primary teacher) */}
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1 flex items-center justify-between gap-1">
+                        <span>เลือกครูผู้สอนแทน <span className="text-red-500">*</span></span>
+                        <span className="text-[10px] text-teal-800 font-medium bg-teal-100 px-2 py-0.5 rounded-md border border-teal-200">
+                          แสดงเฉพาะครูที่มีคาบว่างในวัน{dayOfWeek} ช่วงเวลานี้
+                        </span>
+                      </label>
+                      <select
+                        value={substituteTeacherUsername}
+                        onChange={(e) => setSubstituteTeacherUsername(e.target.value)}
+                        required={isSubstituteEnabled}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82]"
+                      >
+                        <option value="">-- เลือกครูผู้สอนแทน (เฉพาะครูที่มีคาบว่าง) --</option>
+                        {availableSubstituteTeachers.length === 0 ? (
+                          <option value="" disabled>
+                            -- ไม่มีครูผู้สอนท่านอื่นที่มีคาบว่างในช่วงเวลานี้ --
+                          </option>
+                        ) : (
+                          availableSubstituteTeachers.map((t) => (
+                            <option key={t.id} value={t.username}>
+                              {t.fullName} ({t.username}) • คาบว่าง
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      {availableSubstituteTeachers.length === 0 && (
+                        <p className="text-[11px] text-amber-700 mt-1.5 flex items-center gap-1 font-medium">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span>ครูท่านอื่นมีตารางสอนติดคาบเรียนในช่วงเวลานี้ทั้งหมด</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Select Class */}

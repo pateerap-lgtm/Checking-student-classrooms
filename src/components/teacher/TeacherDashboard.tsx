@@ -56,10 +56,34 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const chartRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstance = useRef<Chart | null>(null);
 
+  // Today's date and day of week
+  const todayISODate = getTodayISODate();
+  const todayDayOfWeek = getDayOfWeekFromDate(todayISODate);
+
+  const isAssignmentActiveForTeacher = (a: TeachingAssignment, username: string, dateStr: string) => {
+    const isOriginal = a.teacherUsername === username;
+    const isSubstitute = a.substituteTeacherUsername === username;
+    const subDate = a.substituteDate;
+
+    if (a.substituteTeacherUsername) {
+      if (subDate) {
+        if (dateStr === subDate) {
+          return isSubstitute;
+        } else {
+          return isOriginal;
+        }
+      } else {
+        return isSubstitute;
+      }
+    }
+
+    return isOriginal;
+  };
+
   // Filter teacher's assigned subjects and classes
   const myAssignments = useMemo(
-    () => assignments.filter((a) => a.teacherUsername === teacherUsername),
-    [assignments, teacherUsername]
+    () => assignments.filter((a) => isAssignmentActiveForTeacher(a, teacherUsername, todayISODate)),
+    [assignments, teacherUsername, todayISODate]
   );
 
   // Unique subject IDs and class IDs
@@ -83,7 +107,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   // Teacher attendance logs
   const myLogs = useMemo(
-    () => attendanceLogs.filter((l) => l.teacherUsername === teacherUsername),
+    () => attendanceLogs.filter((l) => l.teacherUsername === teacherUsername || l.substituteTeacherUsername === teacherUsername),
     [attendanceLogs, teacherUsername]
   );
 
@@ -101,9 +125,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Today's date and day of week
-  const todayISODate = getTodayISODate();
-  const todayDayOfWeek = getDayOfWeekFromDate(todayISODate);
+
 
   // Teaching periods scheduled for TODAY
   const todayAssignments = useMemo(() => {

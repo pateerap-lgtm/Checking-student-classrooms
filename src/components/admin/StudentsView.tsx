@@ -1,5 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { UserCheck, Plus, Edit2, Trash2, Download, Upload, FileSpreadsheet, Search, Filter, X } from 'lucide-react';
+import {
+  UserCheck,
+  Plus,
+  Edit2,
+  Trash2,
+  Download,
+  Upload,
+  FileSpreadsheet,
+  Search,
+  X,
+  ArrowUp,
+  ArrowDown,
+  ListOrdered,
+  Save,
+  RotateCcw
+} from 'lucide-react';
 import { Student, Classroom, AcademicYear } from '../../types';
 import { exportToExcel, parseExcelFile, downloadStudentTemplate } from '../../utils/excel';
 import { Pagination } from '../common/Pagination';
@@ -10,6 +25,7 @@ interface StudentsViewProps {
   activeYear?: AcademicYear;
   onAddStudent: (newStudent: Omit<Student, 'id'>) => Promise<void>;
   onUpdateStudent: (id: string, updated: Partial<Student>) => Promise<void>;
+  onReorderStudents: (reordered: { id: string; seq: number }[]) => Promise<void>;
   onDeleteStudent: (id: string) => Promise<void>;
   onDeleteAllStudentsByClass: (classId: string) => Promise<void>;
   onImportStudents: (newStudents: Omit<Student, 'id'>[]) => Promise<void>;
@@ -23,6 +39,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   activeYear,
   onAddStudent,
   onUpdateStudent,
+  onReorderStudents,
   onDeleteStudent,
   onDeleteAllStudentsByClass,
   onImportStudents,
@@ -41,17 +58,32 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const itemsPerPage = 40;
 
   // Form fields
+  const [seq, setSeq] = useState<number>(1);
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('pass123');
   const [isSaving, setIsSaving] = useState(false);
 
-  const currentClass = classes.find((c) => c.id === selectedClassId) || classes[0];
+  // Inline sequence editing states
+  const [isEditingOrder, setIsEditingOrder] = useState(false);
+  const [draftSeqMap, setDraftSeqMap] = useState<Record<string, string>>({});
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
 
-  // Students in selected class
-  const classStudents = students.filter(
-    (s) => s.classId === selectedClassId || (currentClass && s.className === currentClass.name)
-  );
+  useEffect(() => {
+    if (classes.length > 0 && !classes.some((c) => c.id === selectedClassId)) {
+      setSelectedClassId(classes[0].id);
+    }
+  }, [classes, selectedClassId]);
+
+  const currentClass = classes.find((c) => c.id === selectedClassId) || classes[0];
+  const activeClassId = currentClass?.id || selectedClassId;
+
+  // Students in selected class sorted by sequence number
+  const classStudents = [...students]
+    .filter(
+      (s) => s.classId === activeClassId || (currentClass && s.className === currentClass.name)
+    )
+    .sort((a, b) => (Number(a.seq) || 0) - (Number(b.seq) || 0) || a.name.localeCompare(b.name, 'th'));
 
   const openAddModal = () => {
     if (!currentClass) {
@@ -60,7 +92,9 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
     }
     setEditingStudent(null);
     setName('');
-    const nextSeq = classStudents.length + 1;
+    const maxSeq = classStudents.reduce((max, s) => Math.max(max, Number(s.seq) || 0), 0);
+    const nextSeq = maxSeq + 1;
+    setSeq(nextSeq);
     const padSeq = String(nextSeq).padStart(2, '0');
     setUsername(`std_${currentClass.name.replace(/[^a-zA-Z0-9]/g, '')}_${padSeq}`.toLowerCase());
     setPassword('pass123');
@@ -69,6 +103,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
   const openEditModal = (s: Student) => {
     setEditingStudent(s);
+    setSeq(Number(s.seq) || 1);
     setName(s.name);
     setUsername(s.username);
     setPassword(s.password);
@@ -79,17 +114,20 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
     e.preventDefault();
     if (!name.trim() || !username.trim() || !password.trim() || !currentClass) return;
 
+    const validSeq = Math.max(1, Math.floor(Number(seq) || 1));
+
     setIsSaving(true);
     try {
       if (editingStudent) {
         await onUpdateStudent(editingStudent.id, {
+          seq: validSeq,
           name: name.trim(),
           username: username.trim(),
           password: password.trim()
         });
       } else {
         await onAddStudent({
-          seq: classStudents.length + 1,
+          seq: validSeq,
           name: name.trim(),
           className: currentClass.name,
           username: username.trim(),
@@ -101,6 +139,83 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
       setIsModalOpen(false);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleStartEditOrder = () => {
+    const initialMap: Record<string, string> = {};
+    classStudents.forEach((s, idx) => {
+      initialMap[s.id] = String(s.seq || idx + 1);
+    });
+    setDraftSeqMap(initialMap);
+    setIsEditingOrder(true);
+  };
+
+  const handleCancelEditOrder = () => {
+    setIsEditingOrder(false);
+    setDraftSeqMap({});
+  };
+
+  const handleAutoRenumberDraft = () => {
+    const sortedByDraft = [...classStudents].sort((a, b) => {
+      const seqA = Number(draftSeqMap[a.id] ?? a.seq) || 0;
+      const seqB = Number(draftSeqMap[b.id] ?? b.seq) || 0;
+      return seqA - seqB || a.name.localeCompare(b.name, 'th');
+    });
+    const nextMap: Record<string, string> = {};
+    sortedByDraft.forEach((s, idx) => {
+      nextMap[s.id] = String(idx + 1);
+    });
+    setDraftSeqMap(nextMap);
+  };
+
+  const handleSaveOrder = async () => {
+    if (classStudents.length === 0) return;
+
+    const updates: { id: string; seq: number }[] = [];
+    for (let i = 0; i < classStudents.length; i++) {
+      const s = classStudents[i];
+      const rawVal = draftSeqMap[s.id];
+      const parsed = Math.floor(Number(rawVal));
+      if (!rawVal || Number.isNaN(parsed) || parsed < 1) {
+        showToast('warning', `กรุณาระบุลำดับที่ของ "${s.name}" เป็นตัวเลขตั้งแต่ 1 ขึ้นไป`);
+        return;
+      }
+      updates.push({ id: s.id, seq: parsed });
+    }
+
+    setIsSavingOrder(true);
+    try {
+      await onReorderStudents(updates);
+      setIsEditingOrder(false);
+      setDraftSeqMap({});
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
+
+  const handleMoveStudent = async (studentId: string, direction: 'up' | 'down') => {
+    const index = classStudents.findIndex((s) => s.id === studentId);
+    if (index === -1) return;
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === classStudents.length - 1) return;
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    const updated = [...classStudents];
+    const temp = updated[index];
+    updated[index] = updated[targetIndex];
+    updated[targetIndex] = temp;
+
+    const resequenced = updated.map((item, idx) => ({
+      id: item.id,
+      seq: idx + 1
+    }));
+
+    setIsSavingOrder(true);
+    try {
+      await onReorderStudents(resequenced);
+    } finally {
+      setIsSavingOrder(false);
     }
   };
 
@@ -126,7 +241,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const handleExportExcel = () => {
     if (!currentClass) return;
     const exportData = classStudents.map((s, idx) => ({
-      'ลำดับที่': idx + 1,
+      'ลำดับที่': s.seq || idx + 1,
       'ชื่อนักเรียน': s.name,
       'ชั้นเรียน': s.className,
       'username': s.username,
@@ -188,6 +303,11 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, selectedClassId]);
+
+  useEffect(() => {
+    setIsEditingOrder(false);
+    setDraftSeqMap({});
+  }, [selectedClassId]);
 
   return (
     <div className="space-y-6">
@@ -259,6 +379,16 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               <span>ส่งออก Excel</span>
             </button>
 
+            {classStudents.length > 0 && !isEditingOrder && (
+              <button
+                onClick={handleStartEditOrder}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-[#0C7C82] bg-teal-50 hover:bg-teal-100 border border-teal-200 cursor-pointer transition-colors"
+              >
+                <ListOrdered className="w-4 h-4" />
+                <span>แก้ไขลำดับที่</span>
+              </button>
+            )}
+
             {classStudents.length > 0 && (
               <button
                 onClick={handleDeleteAllInClass}
@@ -280,6 +410,49 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
         </div>
       </div>
 
+      {/* Inline Sequence Edit Mode Banner */}
+      {isEditingOrder && (
+        <div className="bg-teal-50/90 border border-teal-200 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-center gap-2.5 text-xs text-teal-900">
+            <ListOrdered className="w-5 h-5 text-[#0C7C82] shrink-0" />
+            <div>
+              <p className="font-bold">โหมดแก้ไขลำดับที่นักเรียนในห้อง {currentClass?.name}</p>
+              <p className="text-teal-700 mt-0.5">
+                กรอกตัวเลขลำดับที่ใหม่ในตาราง แล้วกด "บันทึกลำดับ" หรือใช้ปุ่ม "เรียง 1..N ใหม่" เพื่อจัดเรียงให้ต่อเนื่องอัตโนมัติ
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleAutoRenumberDraft}
+              disabled={isSavingOrder}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-teal-800 bg-white hover:bg-teal-100 border border-teal-200 cursor-pointer transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>เรียง 1..N ใหม่</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleCancelEditOrder}
+              disabled={isSavingOrder}
+              className="px-3 py-2 rounded-xl text-xs font-medium text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 cursor-pointer transition-colors"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveOrder}
+              disabled={isSavingOrder}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-[#0C7C82] hover:bg-[#096368] shadow-sm cursor-pointer disabled:opacity-60 transition-colors"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{isSavingOrder ? 'กำลังบันทึก...' : 'บันทึกลำดับ'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Search Input */}
       <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex items-center gap-3">
         <Search className="w-5 h-5 text-slate-400" />
@@ -292,7 +465,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
         />
       </div>
 
-      {/* Students Table with specified columns: ลำดับที่ (สร้างอัตโนมัติ), ชื่อนักเรียน, ชั้นเรียน, username, password */}
+      {/* Students Table with specified columns: ลำดับที่, ชื่อนักเรียน, ชั้นเรียน, username, password, ปรับลำดับ, จัดการ */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -303,24 +476,39 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                 <th className="py-4 px-6 text-center">ชั้นเรียน</th>
                 <th className="py-4 px-6">username</th>
                 <th className="py-4 px-6">password</th>
+                <th className="py-4 px-6 text-center">ปรับลำดับ</th>
                 <th className="py-4 px-6 text-right">จัดการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
+                  <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
                     ยังไม่มีข้อมูลนักเรียนในชั้นเรียนนี้ คลิก "เพิ่มนักเรียน" หรือ "นำเข้า Excel"
                   </td>
                 </tr>
               ) : (
                 paginatedStudents.map((s, pageIdx) => {
                   const globalIdx = (currentPage - 1) * itemsPerPage + pageIdx;
+                  const classIdx = classStudents.findIndex((cs) => cs.id === s.id);
+                  const disableMove = isSavingOrder || isEditingOrder || searchTerm.trim().length > 0;
                   return (
                   <tr key={s.id} className="hover:bg-slate-50/50 transition-colors">
-                    {/* Auto-sequence column */}
-                    <td className="py-4 px-6 text-center font-bold text-slate-500 text-xs">
-                      {s.seq || globalIdx + 1}
+                    <td className="py-4 px-6 text-center font-bold text-slate-600 text-xs">
+                      {isEditingOrder ? (
+                        <input
+                          type="number"
+                          min={1}
+                          value={draftSeqMap[s.id] ?? String(s.seq || globalIdx + 1)}
+                          onChange={(e) =>
+                            setDraftSeqMap((prev) => ({ ...prev, [s.id]: e.target.value }))
+                          }
+                          aria-label={`ลำดับที่ของ ${s.name}`}
+                          className="w-16 px-2 py-1 text-center rounded-lg border border-[#0C7C82] bg-teal-50/40 font-bold text-slate-800 text-xs focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82]"
+                        />
+                      ) : (
+                        s.seq || globalIdx + 1
+                      )}
                     </td>
                     <td className="py-4 px-6 font-bold text-slate-800">{s.name}</td>
                     <td className="py-4 px-6 text-center">
@@ -333,6 +521,28 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                     </td>
                     <td className="py-4 px-6 font-mono text-slate-600 text-xs">{s.username}</td>
                     <td className="py-4 px-6 font-mono text-slate-400 text-xs">••••••••</td>
+                    <td className="py-4 px-6 text-center">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveStudent(s.id, 'up')}
+                          disabled={disableMove || classIdx <= 0}
+                          className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                          title={searchTerm.trim() ? 'ล้างคำค้นหาก่อนปรับลำดับ' : 'เลื่อนขึ้น'}
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveStudent(s.id, 'down')}
+                          disabled={disableMove || classIdx === -1 || classIdx >= classStudents.length - 1}
+                          className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                          title={searchTerm.trim() ? 'ล้างคำค้นหาก่อนปรับลำดับ' : 'เลื่อนลง'}
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
                     <td className="py-4 px-6 text-right space-x-1">
                       <button
                         onClick={() => openEditModal(s)}
@@ -383,6 +593,20 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                  ลำดับที่ (เลขที่ในชั้นเรียน) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={seq}
+                  onChange={(e) => setSeq(Number(e.target.value))}
+                  required
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] text-sm font-semibold"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
                   ชื่อ-นามสกุล นักเรียน <span className="text-red-500">*</span>

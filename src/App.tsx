@@ -526,6 +526,24 @@ export default function App() {
     showToast('success', 'อัพเดทข้อมูลนักเรียนสำเร็จ');
   };
 
+  const handleReorderStudents = async (reordered: { id: string; seq: number }[]) => {
+    try {
+      if (reordered.length === 0) return;
+      for (let i = 0; i < reordered.length; i += 400) {
+        const batch = writeBatch(db);
+        reordered.slice(i, i + 400).forEach((s) => {
+          batch.update(doc(db, 'students', s.id), { seq: s.seq });
+        });
+        await batch.commit();
+      }
+      showToast('success', 'บันทึกลำดับที่นักเรียนเรียบร้อยแล้ว');
+    } catch (err) {
+      console.error(err);
+      handleFirestoreError(err, OperationType.UPDATE, 'students');
+      showToast('error', 'เกิดข้อผิดพลาดในการบันทึกลำดับที่นักเรียน');
+    }
+  };
+
   const handleDeleteStudent = async (id: string) => {
     await deleteDoc(doc(db, 'students', id));
     showToast('success', 'ลบนักเรียนสำเร็จ');
@@ -996,6 +1014,7 @@ export default function App() {
                       activeYear={activeYear}
                       onAddStudent={handleAddStudent}
                       onUpdateStudent={handleUpdateStudent}
+                      onReorderStudents={handleReorderStudents}
                       onDeleteStudent={handleDeleteStudent}
                       onDeleteAllStudentsByClass={handleDeleteAllStudentsByClass}
                       onImportStudents={handleImportStudents}
@@ -1133,6 +1152,8 @@ export default function App() {
                       onSaveAttendance={handleSaveAttendance}
                       onUpdateAttendance={handleUpdateAttendance}
                       onDeleteAttendance={handleDeleteAttendance}
+                      onUpdateAssignment={handleUpdateAssignment}
+                      teachers={users.filter((u) => u.role === 'teacher')}
                       openConfirm={openConfirm}
                       showToast={showToast}
                     />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ClipboardCheck,
   Calendar,
@@ -14,7 +14,8 @@ import {
   Lock,
   Sparkles,
   Info,
-  X
+  X,
+  Users
 } from 'lucide-react';
 import {
   TeachingAssignment,
@@ -26,7 +27,8 @@ import {
   AttendanceLog,
   AttendanceStatus,
   StudentAttendanceItem,
-  AcademicYear
+  AcademicYear,
+  AppUser
 } from '../../types';
 import {
   DAY_ORDER,
@@ -40,6 +42,7 @@ interface TeacherAttendanceViewProps {
   teacherUsername: string;
   teacherFullName: string;
   assignments: TeachingAssignment[];
+  teachers: AppUser[];
   periods: Period[];
   classes: Classroom[];
   subjects: Subject[];
@@ -51,6 +54,7 @@ interface TeacherAttendanceViewProps {
   onSaveAttendance: (log: Omit<AttendanceLog, 'id'>) => Promise<void>;
   onUpdateAttendance: (id: string, log: Partial<AttendanceLog>) => Promise<void>;
   onDeleteAttendance: (id: string) => Promise<void>;
+  onUpdateAssignment: (id: string, updated: Partial<TeachingAssignment>) => Promise<void>;
   openConfirm: (title: string, message: string, onConfirm: () => void, type?: 'danger' | 'warning') => void;
   showToast: (type: 'success' | 'error' | 'warning', message: string) => void;
 }
@@ -59,6 +63,7 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
   teacherUsername,
   teacherFullName,
   assignments,
+  teachers,
   periods,
   classes,
   subjects,
@@ -70,6 +75,7 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
   onSaveAttendance,
   onUpdateAttendance,
   onDeleteAttendance,
+  onUpdateAssignment,
   openConfirm,
   showToast
 }) => {
@@ -79,11 +85,98 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
   // Determine active day of week from selected date
   const selectedDayOfWeek = getDayOfWeekFromDate(selectedDate);
 
-  // Teacher's timetable assignments
-  const myAssignments = assignments.filter((a) => a.teacherUsername === teacherUsername);
+  // Helper to check if an assignment is active for teacher on selectedDate
+  const isAssignmentActiveForTeacher = (a: TeachingAssignment, username: string, dateStr: string) => {
+    const isOriginal = a.teacherUsername === username;
+    const isSubstitute = a.substituteTeacherUsername === username;
+    const subDate = a.substituteDate;
+
+    if (a.substituteTeacherUsername) {
+      if (subDate) {
+        if (dateStr === subDate) {
+          return isSubstitute;
+        } else {
+          return isOriginal;
+        }
+      } else {
+        return isSubstitute;
+      }
+    }
+
+    return isOriginal;
+  };
+
+  // Teacher's timetable assignments (including substitutions)
+  const myAssignments = assignments.filter((a) => isAssignmentActiveForTeacher(a, teacherUsername, selectedDate));
 
   // Sorting periods
-  const sortedPeriods = [...periods].sort((a, b) => a.order - b.order);
+  const sortedPeriods = useMemo(() => [...periods].sort((a, b) => a.order - b.order), [periods]);
+
+  // Checkbox at table header: Substitution mode toggle
+  const [isSubstitutionMode, setIsSubstitutionMode] = useState(false);
+
+  // Advance Substitution Modal States
+  const [selectedSubAssignment, setSelectedSubAssignment] = useState<TeachingAssignment | null>(null);
+  const [isSubEnabled, setIsSubEnabled] = useState(false);
+  const [subTeacherUsername, setSubTeacherUsername] = useState('');
+  const [subDate, setSubDate] = useState(getTodayISODate());
+  const [isSubSaving, setIsSubSaving] = useState(false);
+
+  const openSubModal = (a: TeachingAssignment) => {
+    setSelectedSubAssignment(a);
+    setIsSubEnabled(!!a.substituteTeacherUsername);
+    setSubTeacherUsername(a.substituteTeacherUsername || '');
+    setSubDate(a.substituteDate || selectedDate || getTodayISODate());
+  };
+
+  // Filter assignments displayed in timetable
+  const displayAssignments = useMemo(() => {
+    if (isSubstitutionMode) {
+      return assignments.filter((a) => a.teacherUsername === teacherUsername || a.substituteTeacherUsername === teacherUsername);
+    }
+    return assignments.filter((a) => isAssignmentActiveForTeacher(a, teacherUsername, selectedDate));
+  }, [assignments, isSubstitutionMode, teacherUsername, selectedDate]);
+
+  // Calculate available substitute teachers for selectedSubAssignment (only teachers with free periods, excluding self)
+  const availableSubstituteTeachers = useMemo(() => {
+    if (!selectedSubAssignment) return [];
+    const targetAssignment = selectedSubAssignment;
+
+    const teachingPeriods = sortedPeriods.filter((p) => !p.isLunchBreak);
+    const startIdx = teachingPeriods.findIndex((p) => p.id === targetAssignment.periodId);
+    const endIdx = targetAssignment.endPeriodId
+      ? teachingPeriods.findIndex((p) => p.id === targetAssignment.endPeriodId)
+      : startIdx;
+    const targetStart = startIdx !== -1 ? startIdx : 0;
+    const targetEnd = endIdx !== -1 && endIdx >= targetStart ? endIdx : targetStart;
+    const targetPeriodIds = teachingPeriods.slice(targetStart, targetEnd + 1).map((p) => p.id);
+
+    return teachers.filter((t) => {
+      // Exclude primary teacher (ไม่แสดงชื่อตนเอง)
+      if (t.username === teacherUsername) return false;
+
+      // Check conflict
+      const hasConflict = assignments.some((a) => {
+        if (a.id === targetAssignment.id) return false;
+        if (a.dayOfWeek !== targetAssignment.dayOfWeek) return false;
+
+        const isTeacher = a.teacherUsername === t.username || a.substituteTeacherUsername === t.username;
+        if (!isTeacher) return false;
+
+        const aStartIdx = teachingPeriods.findIndex((p) => p.id === a.periodId);
+        const aEndIdx = a.endPeriodId
+          ? teachingPeriods.findIndex((p) => p.id === a.endPeriodId)
+          : aStartIdx;
+        const realAStart = aStartIdx !== -1 ? aStartIdx : 0;
+        const realAEnd = aEndIdx !== -1 && aEndIdx >= realAStart ? aEndIdx : realAStart;
+        const aPeriodIds = teachingPeriods.slice(realAStart, realAEnd + 1).map((p) => p.id);
+
+        return targetPeriodIds.some((pId) => aPeriodIds.includes(pId));
+      });
+
+      return !hasConflict;
+    });
+  }, [teachers, teacherUsername, selectedSubAssignment, sortedPeriods, assignments]);
 
   // Attendance checking modal states
   const [isCheckModalOpen, setIsCheckModalOpen] = useState(false);
@@ -95,8 +188,10 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
   // View Attendance Detail Modal
   const [viewingLog, setViewingLog] = useState<AttendanceLog | null>(null);
 
-  // Teacher logs
-  const teacherLogs = attendanceLogs.filter((l) => l.teacherUsername === teacherUsername);
+  // Teacher logs (including substitutions)
+  const teacherLogs = attendanceLogs.filter(
+    (l) => l.teacherUsername === teacherUsername || l.substituteTeacherUsername === teacherUsername
+  );
 
   // Auto-open modal when navigating from Dashboard with pendingAssignment
   useEffect(() => {
@@ -246,6 +341,7 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
           periodName: activeAssignment.periodName,
           teacherUsername,
           teacherName: teacherFullName,
+          substituteTeacherUsername: activeAssignment.substituteTeacherUsername,
           records: studentRecords,
           summary: summaryPayload,
           updatedAt: new Date().toISOString(),
@@ -273,11 +369,12 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
   // Open edit modal directly from logs table
   const handleEditFromLog = (log: AttendanceLog) => {
     const matchedAssignment = myAssignments.find(
-      (a) => a.subjectId === log.subjectId && a.classId === log.classId
+      (a) => a.subjectId === log.subjectId && a.classId === log.classId && a.periodId === log.periodId
     ) || {
       id: 'temp',
       teacherUsername: log.teacherUsername,
       teacherName: log.teacherName || teacherFullName,
+      substituteTeacherUsername: log.substituteTeacherUsername,
       classId: log.classId,
       className: log.className,
       subjectId: log.subjectId,
@@ -333,25 +430,51 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
       </div>
 
       {/* Timetable Notice */}
-      <div className="p-3.5 rounded-2xl bg-teal-50/70 border border-teal-200 text-teal-900 text-xs flex items-center gap-2.5">
-        <Info className="w-4 h-4 text-teal-700 shrink-0" />
-        <span>
-          <strong>เงื่อนไขความถูกต้อง:</strong> วันที่ที่เลือกคือ <strong>{formatToThaiBE(selectedDate)} (วัน{selectedDayOfWeek || '-'})</strong> ระบบจะอนุญาตให้คลิกเช็คชื่อได้เฉพาะคาบสอนของ <strong>วัน{selectedDayOfWeek || '-'}</strong> เท่านั้น คาบของวันอื่นจะถูกล็อคไว้
-        </span>
-      </div>
+      {isSubstitutionMode ? (
+        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 text-xs flex items-center gap-2.5 shadow-2xs">
+          <Users className="w-4 h-4 text-amber-700 shrink-0" />
+          <span>
+            <strong>โหมดจัดสอนแทนล่วงหน้าเปิดอยู่:</strong> คลิกที่คาบสอนในตารางด้านล่างเพื่อเลือกครูผู้สอนแทนและกำหนดวันที่ต้องการให้สอนแทน หรือคลิกเพื่อแก้ไข/ยกเลิก
+          </span>
+        </div>
+      ) : (
+        <div className="p-3.5 rounded-2xl bg-teal-50/70 border border-teal-200 text-teal-900 text-xs flex items-center gap-2.5">
+          <Info className="w-4 h-4 text-teal-700 shrink-0" />
+          <span>
+            <strong>เงื่อนไขความถูกต้อง:</strong> วันที่ที่เลือกคือ <strong>{formatToThaiBE(selectedDate)} (วัน{selectedDayOfWeek || '-'})</strong> ระบบจะอนุญาตให้คลิกเช็คชื่อได้เฉพาะคาบสอนของ <strong>วัน{selectedDayOfWeek || '-'}</strong> เท่านั้น คาบของวันอื่นจะถูกล็อคไว้
+          </span>
+        </div>
+      )}
 
       {/* Monday - Friday Timetable (ตารางสอน วันจันทร์-วันศุกร์) */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-xs overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+        <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-[#0C7C82]" />
             <h3 className="font-bold text-slate-800 text-base">
               ตารางสอนประจำสัปดาห์ (วันจันทร์ - วันศุกร์)
             </h3>
           </div>
-          <span className="text-xs text-slate-400">
-            คลิกที่กล่องรายวิชาเพื่อทำการเช็คชื่อ
-          </span>
+
+          <div className="flex items-center gap-3">
+            {/* Table Header Checkbox for Advance Substitution */}
+            <label className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-teal-50 border border-teal-200 cursor-pointer hover:bg-teal-100 transition-colors shadow-2xs">
+              <input
+                type="checkbox"
+                checked={isSubstitutionMode}
+                onChange={(e) => setIsSubstitutionMode(e.target.checked)}
+                className="w-4 h-4 rounded text-[#0C7C82] focus:ring-[#0C7C82] border-slate-300 cursor-pointer"
+              />
+              <span className="text-xs font-bold text-[#0C7C82] flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5" />
+                <span>เปิดโหมดจัดสอนแทนล่วงหน้า</span>
+              </span>
+            </label>
+
+            <span className="text-xs text-slate-400 hidden sm:inline">
+              {isSubstitutionMode ? 'คลิกที่คาบสอนเพื่อระบุครูสอนแทน' : 'คลิกที่คาบสอนเพื่อทำการเช็คชื่อ'}
+            </span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -423,7 +546,7 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
                       }
 
                       // Find assignment for this day and period (supports multi-period assignment)
-                      const assignment = myAssignments.find((a) => {
+                      const assignment = displayAssignments.find((a) => {
                         if (a.dayOfWeek !== day) return false;
                         if (a.periodId === period.id) return true;
                         if (a.endPeriodId && a.endPeriodId !== a.periodId) {
@@ -461,22 +584,35 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
                         <td key={period.id} className="p-2 border-r border-slate-200">
                           <button
                             type="button"
-                            onClick={() => handleSlotClick(assignment, day)}
+                            onClick={() => {
+                              if (isSubstitutionMode) {
+                                openSubModal(assignment);
+                              } else {
+                                handleSlotClick(assignment, day);
+                              }
+                            }}
                             className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between group ${
-                              isSelectedDay
+                              isSubstitutionMode
+                                ? 'hover:scale-102 hover:shadow-md border-amber-300 bg-amber-50/40 ring-1 ring-amber-200'
+                                : isSelectedDay
                                 ? 'hover:scale-102 hover:shadow-md border-teal-300 bg-white ring-1 ring-teal-200'
                                 : 'opacity-60 bg-slate-50 border-slate-200 hover:opacity-80'
                             }`}
                           >
                             <div className="flex items-start justify-between gap-1 mb-1">
                               <span
-                                className="px-2 py-0.5 rounded-md text-[10px] text-white font-bold"
+                                className="px-2 py-0.5 rounded-md text-[10px] text-white font-bold shadow-2xs"
                                 style={{ backgroundColor: assignment.color || '#0C7C82' }}
                               >
                                 {assignment.className}
                               </span>
 
-                              {isSelectedDay ? (
+                              {isSubstitutionMode ? (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-800 font-bold bg-amber-100 px-1.5 py-0.5 rounded-full border border-amber-200">
+                                  <Edit2 className="w-3 h-3" />
+                                  <span>สอนแทน</span>
+                                </span>
+                              ) : isSelectedDay ? (
                                 isAlreadyChecked ? (
                                   <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded-full">
                                     <CheckCircle2 className="w-3 h-3" />
@@ -493,12 +629,21 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
                             </div>
 
                             <div>
-                              <div className="font-bold text-slate-800 text-[11px] truncate">
+                              <div className="font-extrabold text-[#0C7C82] text-[11px] truncate">
                                 {assignment.subjectCode}
                               </div>
-                              <div className="text-[10px] text-slate-600 truncate">
+                              <div className="text-[10px] font-semibold text-slate-800 truncate">
                                 {assignment.subjectName}
                               </div>
+                              {assignment.substituteTeacherUsername && (
+                                <div className="mt-1 text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200 inline-block">
+                                  สอนแทนโดย: {teachers.find((t) => t.username === assignment.substituteTeacherUsername)?.fullName || assignment.substituteTeacherUsername}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="text-[10px] font-mono text-slate-500 font-medium mt-2 pt-1 border-t border-slate-100">
+                              {period.startTime} - {period.endTime}
                             </div>
                           </button>
                         </td>
@@ -893,6 +1038,195 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
               >
                 ปิดหน้าต่าง
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Advance Substitution Modal */}
+      {selectedSubAssignment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-teal-50 text-[#0C7C82] flex items-center justify-center font-bold">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">
+                    จัดสอนแทนล่วงหน้า
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    วิชา {selectedSubAssignment.subjectCode} {selectedSubAssignment.subjectName} ({selectedSubAssignment.className})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedSubAssignment(null)}
+                className="p-1 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Course & Teacher Details */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+                <div>วันสอนตามตาราง: <strong>วัน{selectedSubAssignment.dayOfWeek}</strong> • {selectedSubAssignment.periodName}</div>
+                <div>ครูผู้สอนหลัก: <strong>{selectedSubAssignment.teacherName || teacherFullName}</strong></div>
+              </div>
+
+              {/* Checkbox: เปิดการจัดสอนแทนวิชานี้ */}
+              <div className="p-4 rounded-2xl bg-teal-50/60 border border-teal-200 space-y-3">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isSubEnabled}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsSubEnabled(checked);
+                      if (!checked) {
+                        setSubTeacherUsername('');
+                      } else {
+                        if (!subDate) setSubDate(selectedDate || getTodayISODate());
+                      }
+                    }}
+                    className="w-4 h-4 rounded text-[#0C7C82] focus:ring-[#0C7C82] border-slate-300 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 block">
+                      ต้องการจัดสอนแทน (ระบุครูสอนแทน)
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-normal block">
+                      เลือกครูผู้สอนแทนที่มีคาบว่างและกำหนดวันที่สอนแทน
+                    </span>
+                  </div>
+                </label>
+
+                {/* Form inputs when checkbox is enabled */}
+                {isSubEnabled && (
+                  <div className="pt-3 border-t border-teal-200/80 space-y-3 animate-fade-in">
+                    {/* Date picker: วันที่ต้องการให้สอนแทน */}
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
+                        วันที่ต้องการให้สอนแทน <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={subDate}
+                        onChange={(e) => setSubDate(e.target.value)}
+                        required={isSubEnabled}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-white font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Dropdown: เลือกครูผู้สอนแทน (เฉพาะครูที่มีคาบว่าง) */}
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1 flex items-center justify-between gap-1">
+                        <span>เลือกครูผู้สอนแทน <span className="text-red-500">*</span></span>
+                        <span className="text-[10px] text-teal-800 font-medium bg-teal-100 px-2 py-0.5 rounded-md border border-teal-200">
+                          แสดงเฉพาะครูที่มีคาบว่าง
+                        </span>
+                      </label>
+                      <select
+                        value={subTeacherUsername}
+                        onChange={(e) => setSubTeacherUsername(e.target.value)}
+                        required={isSubEnabled}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82]"
+                      >
+                        <option value="">-- เลือกครูผู้สอนแทน (เฉพาะครูที่มีคาบว่าง) --</option>
+                        {availableSubstituteTeachers.length === 0 ? (
+                          <option value="" disabled>
+                            -- ไม่มีครูผู้สอนท่านอื่นที่มีคาบว่างในช่วงเวลานี้ --
+                          </option>
+                        ) : (
+                          availableSubstituteTeachers.map((t: AppUser) => (
+                            <option key={t.id} value={t.username}>
+                              {t.fullName} ({t.username}) • มีคาบว่าง
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      {availableSubstituteTeachers.length === 0 && (
+                        <p className="text-[11px] text-amber-700 mt-1.5 flex items-center gap-1 font-medium">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span>ครูท่านอื่นมีตารางสอนติดคาบเรียนในช่วงเวลานี้ทั้งหมด</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                {selectedSubAssignment.substituteTeacherUsername && (
+                  <button
+                    type="button"
+                    disabled={isSubSaving}
+                    onClick={async () => {
+                      setIsSubSaving(true);
+                      try {
+                        await onUpdateAssignment(selectedSubAssignment.id, {
+                          substituteTeacherUsername: '',
+                          substituteDate: ''
+                        });
+                        showToast('success', 'ยกเลิกการสอนแทน เรียบร้อยแล้ว');
+                        setSelectedSubAssignment(null);
+                      } catch (err) {
+                        showToast('error', 'เกิดข้อผิดพลาดในการยกเลิกการสอนแทน');
+                      } finally {
+                        setIsSubSaving(false);
+                      }
+                    }}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 transition-colors cursor-pointer border border-rose-200 mr-auto"
+                  >
+                    ยกเลิกการสอนแทน
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedSubAssignment(null)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer transition-colors"
+                >
+                  ปิด
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSubSaving}
+                  onClick={async () => {
+                    if (isSubEnabled) {
+                      if (!subTeacherUsername) {
+                        showToast('warning', 'กรุณาเลือกครูผู้สอนแทน');
+                        return;
+                      }
+                      if (!subDate) {
+                        showToast('warning', 'กรุณาระบุวันที่ต้องการให้สอนแทน');
+                        return;
+                      }
+                    }
+
+                    setIsSubSaving(true);
+                    try {
+                      await onUpdateAssignment(selectedSubAssignment.id, {
+                        substituteTeacherUsername: isSubEnabled ? subTeacherUsername : '',
+                        substituteDate: isSubEnabled ? subDate : ''
+                      });
+                      showToast('success', isSubEnabled ? 'บันทึกการจัดสอนแทนล่วงหน้าเรียบร้อยแล้ว' : 'บันทึกการยกเลิกการสอนแทนเรียบร้อยแล้ว');
+                      setSelectedSubAssignment(null);
+                    } catch (err) {
+                      showToast('error', 'เกิดข้อผิดพลาดในการบันทึกการสอนแทน');
+                    } finally {
+                      setIsSubSaving(false);
+                    }
+                  }}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-[#0C7C82] to-[#35B4B0] hover:shadow-md cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
+                >
+                  {isSubSaving ? 'กำลังบันทึก...' : 'บันทึกการจัดสอนแทน'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

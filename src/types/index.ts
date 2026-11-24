@@ -88,6 +88,8 @@ export interface TeachingAssignment {
   dayOfWeek: DayOfWeek;
   color: string;
   academicYearId?: string;
+  substituteTeacherUsername?: string;
+  substituteDate?: string;
 }
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'sick' | 'leave';
@@ -124,6 +126,7 @@ export interface AttendanceLog {
   periodName: string;
   teacherUsername: string;
   teacherName?: string;
+  substituteTeacherUsername?: string;
   records: StudentAttendanceItem[];
   summary: AttendanceSummary;
   updatedAt: string;
