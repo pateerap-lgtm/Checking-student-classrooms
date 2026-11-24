@@ -1135,8 +1135,8 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                           <div
                             className="group relative h-full min-h-[102px] rounded-2xl p-2.5 border transition-all hover:shadow-md cursor-pointer flex flex-col justify-between"
                             style={{
-                              backgroundColor: `${assignment.color || '#0C7C82'}12`,
-                              borderColor: `${assignment.color || '#0C7C82'}50`
+                              backgroundColor: assignment.substituteTeacherUsername ? '#FEF2F2' : `${assignment.color || '#0C7C82'}12`,
+                              borderColor: assignment.substituteTeacherUsername ? '#F87171' : `${assignment.color || '#0C7C82'}50`
                             }}
                             onClick={() => openEditModal(assignment)}
                             title="คลิกเพื่อแก้ไขการมอบหมายสอน"
@@ -1146,7 +1146,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                                 <span
                                   className="px-2 py-0.5 rounded-md text-[11px] font-black shadow-2xs"
                                   style={{
-                                    backgroundColor: assignment.color || '#0C7C82',
+                                    backgroundColor: assignment.substituteTeacherUsername ? '#DC2626' : (assignment.color || '#0C7C82'),
                                     color: '#ffffff'
                                   }}
                                 >
@@ -1161,14 +1161,14 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                               </div>
 
                               <div className="text-left mt-1">
-                                <div className="font-extrabold text-xs text-slate-900 leading-snug">
+                                <div className={`font-extrabold text-xs leading-snug ${assignment.substituteTeacherUsername ? 'text-red-700' : 'text-slate-900'}`}>
                                   {assignment.subjectCode}
                                 </div>
-                                <div className="text-[11px] text-slate-700 font-medium line-clamp-2 leading-tight mt-0.5">
+                                <div className={`text-[11px] font-medium line-clamp-2 leading-tight mt-0.5 ${assignment.substituteTeacherUsername ? 'text-red-900' : 'text-slate-700'}`}>
                                   {assignment.subjectName}
                                 </div>
                                 {assignment.substituteTeacherUsername && (
-                                  <div className="mt-1 font-bold text-[10px] text-amber-900 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded-md inline-block">
+                                  <div className="mt-1 font-bold text-[10px] text-red-800 bg-red-100 border border-red-300 px-1.5 py-0.5 rounded-md inline-block">
                                     สอนแทน: {teachers.find((t) => t.username === assignment.substituteTeacherUsername)?.fullName || assignment.substituteTeacherUsername}
                                   </div>
                                 )}
@@ -1323,8 +1323,8 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                         <span className="group-hover:underline">{a.teacherName}</span>
                       </button>
                       {a.substituteTeacherUsername && (
-                        <div className="mt-1.5 text-[11px] text-amber-800 font-medium">
-                          <span className="px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200">
+                        <div className="mt-1.5 text-[11px] text-red-700 font-medium">
+                          <span className="px-2 py-0.5 rounded-md bg-red-50 border border-red-200">
                             สอนแทนโดย: {teachers.find((t) => t.username === a.substituteTeacherUsername)?.fullName || a.substituteTeacherUsername}
                           </span>
                         </div>

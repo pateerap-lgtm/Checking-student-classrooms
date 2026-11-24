@@ -85,28 +85,33 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
   // Determine active day of week from selected date
   const selectedDayOfWeek = getDayOfWeekFromDate(selectedDate);
 
-  // Helper to check if an assignment is active for teacher on selectedDate
-  const isAssignmentActiveForTeacher = (a: TeachingAssignment, username: string, dateStr: string) => {
-    const isOriginal = a.teacherUsername === username;
-    const isSubstitute = a.substituteTeacherUsername === username;
-    const subDate = a.substituteDate;
+  const todayISODate = getTodayISODate();
 
-    if (a.substituteTeacherUsername) {
-      if (subDate) {
-        if (dateStr === subDate) {
-          return isSubstitute;
-        } else {
-          return isOriginal;
-        }
-      } else {
-        return isSubstitute;
-      }
-    }
-
-    return isOriginal;
+  // Check if the primary teacher has delegated this slot to a substitute on dateStr (blocks attendance checking)
+  const isDelegatedToSubstitute = (a: TeachingAssignment, username: string, dateStr: string) => {
+    if (a.teacherUsername !== username) return false;
+    if (!a.substituteTeacherUsername || a.substituteTeacherUsername === username) return false;
+    return !a.substituteDate || a.substituteDate === dateStr;
   };
 
-  // Teacher's timetable assignments (including substitutions)
+  // Check if the primary teacher has an active/upcoming (or selected-date) substitution on this slot
+  const hasActiveSubstitution = (a: TeachingAssignment, username: string, dateStr: string) => {
+    if (a.teacherUsername !== username) return false;
+    if (!a.substituteTeacherUsername || a.substituteTeacherUsername === username) return false;
+    return !a.substituteDate || a.substituteDate >= todayISODate || a.substituteDate === dateStr;
+  };
+
+  // Helper to check if an assignment should appear in teacher's timetable on dateStr
+  // Note: Primary teacher's own subjects NEVER disappear even when delegated to a substitute
+  const isAssignmentActiveForTeacher = (a: TeachingAssignment, username: string, dateStr: string) => {
+    if (a.teacherUsername === username) return true;
+    if (a.substituteTeacherUsername === username) {
+      return !a.substituteDate || a.substituteDate === dateStr;
+    }
+    return false;
+  };
+
+  // Teacher's timetable assignments (including own subjects and active substitutions)
   const myAssignments = assignments.filter((a) => isAssignmentActiveForTeacher(a, teacherUsername, selectedDate));
 
   // Sorting periods
@@ -129,10 +134,32 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
     setSubDate(a.substituteDate || selectedDate || getTodayISODate());
   };
 
+  const handleCancelSubstitution = (a: TeachingAssignment) => {
+    const subName =
+      teachers.find((t) => t.username === a.substituteTeacherUsername)?.fullName ||
+      a.substituteTeacherUsername;
+    openConfirm(
+      'ยืนยันการยกเลิกการสอนแทน',
+      `คุณต้องการยกเลิกการมอบหมายสอนแทนวิชา ${a.subjectCode} ${a.subjectName} (${a.className}) ให้ ${subName} ใช่หรือไม่?`,
+      async () => {
+        try {
+          await onUpdateAssignment(a.id, {
+            substituteTeacherUsername: '',
+            substituteDate: ''
+          });
+          showToast('success', 'ยกเลิกการสอนแทนเรียบร้อยแล้ว กลับมาสอนตามปกติ');
+        } catch (err) {
+          showToast('error', 'เกิดข้อผิดพลาดในการยกเลิกการสอนแทน');
+        }
+      },
+      'warning'
+    );
+  };
+
   // Filter assignments displayed in timetable
   const displayAssignments = useMemo(() => {
     if (isSubstitutionMode) {
-      return assignments.filter((a) => a.teacherUsername === teacherUsername || a.substituteTeacherUsername === teacherUsername);
+      return assignments.filter((a) => a.teacherUsername === teacherUsername);
     }
     return assignments.filter((a) => isAssignmentActiveForTeacher(a, teacherUsername, selectedDate));
   }, [assignments, isSubstitutionMode, teacherUsername, selectedDate]);
@@ -153,14 +180,17 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
 
     return teachers.filter((t) => {
       // Exclude primary teacher (ไม่แสดงชื่อตนเอง)
-      if (t.username === teacherUsername) return false;
+      if (t.username === teacherUsername || t.username === targetAssignment.teacherUsername) return false;
 
-      // Check conflict
+      // Check conflict on that day/period (and same date if substitute)
       const hasConflict = assignments.some((a) => {
         if (a.id === targetAssignment.id) return false;
         if (a.dayOfWeek !== targetAssignment.dayOfWeek) return false;
 
-        const isTeacher = a.teacherUsername === t.username || a.substituteTeacherUsername === t.username;
+        const isTeacher =
+          a.teacherUsername === t.username ||
+          (a.substituteTeacherUsername === t.username &&
+            (!a.substituteDate || !subDate || a.substituteDate === subDate));
         if (!isTeacher) return false;
 
         const aStartIdx = teachingPeriods.findIndex((p) => p.id === a.periodId);
@@ -176,7 +206,7 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
 
       return !hasConflict;
     });
-  }, [teachers, teacherUsername, selectedSubAssignment, sortedPeriods, assignments]);
+  }, [teachers, teacherUsername, selectedSubAssignment, sortedPeriods, assignments, subDate]);
 
   // Attendance checking modal states
   const [isCheckModalOpen, setIsCheckModalOpen] = useState(false);
@@ -197,6 +227,20 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
   useEffect(() => {
     if (pendingAssignment) {
       const today = getTodayISODate();
+      if (isDelegatedToSubstitute(pendingAssignment, teacherUsername, today)) {
+        const subName =
+          teachers.find((t) => t.username === pendingAssignment.substituteTeacherUsername)?.fullName ||
+          pendingAssignment.substituteTeacherUsername;
+        showToast(
+          'warning',
+          `วิชานี้มอบหมายให้ ${subName} สอนแทน${
+            pendingAssignment.substituteDate ? `ในวันที่ ${formatToThaiBE(pendingAssignment.substituteDate)}` : ''
+          }แล้ว ไม่สามารถเช็คชื่อได้`
+        );
+        onClearPendingAssignment?.();
+        return;
+      }
+
       setSelectedDate(today);
       setActiveAssignment(pendingAssignment);
 
@@ -234,6 +278,20 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
 
   // Open attendance modal for a timetable slot
   const handleSlotClick = (assignment: TeachingAssignment, slotDay: DayOfWeek) => {
+    // ENFORCE: Block checking attendance if this class was delegated to a substitute teacher for selectedDate
+    if (isDelegatedToSubstitute(assignment, teacherUsername, selectedDate)) {
+      const subName =
+        teachers.find((t) => t.username === assignment.substituteTeacherUsername)?.fullName ||
+        assignment.substituteTeacherUsername;
+      showToast(
+        'warning',
+        `วิชานี้มอบหมายให้ ${subName} สอนแทน${
+          assignment.substituteDate ? `ในวันที่ ${formatToThaiBE(assignment.substituteDate)}` : ''
+        }แล้ว ไม่สามารถเช็คชื่อได้`
+      );
+      return;
+    }
+
     // ENFORCE: "แล้วให้ระบบเลือกวันเช็คชื่อที่ตรงกับวันที่เลือกได้เท่านั้น ถ้าเป็นวันอื่นไม่สามารถเช็คชื่อได้"
     if (slotDay !== selectedDayOfWeek) {
       showToast(
@@ -545,8 +603,8 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
                         );
                       }
 
-                      // Find assignment for this day and period (supports multi-period assignment)
-                      const assignment = displayAssignments.find((a) => {
+                      // Find assignment for this day and period (prefer owner assignment if both exist)
+                      const matchesSlot = (a: TeachingAssignment) => {
                         if (a.dayOfWeek !== day) return false;
                         if (a.periodId === period.id) return true;
                         if (a.endPeriodId && a.endPeriodId !== a.periodId) {
@@ -558,7 +616,10 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
                           }
                         }
                         return false;
-                      });
+                      };
+                      const assignment =
+                        displayAssignments.find((a) => a.teacherUsername === teacherUsername && matchesSlot(a)) ||
+                        displayAssignments.find(matchesSlot);
 
                       if (!assignment) {
                         return (
@@ -571,6 +632,20 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
                         );
                       }
 
+                      const isOwner = assignment.teacherUsername === teacherUsername;
+                      const isSubForMe = assignment.substituteTeacherUsername === teacherUsername;
+                      const isDelegated = isDelegatedToSubstitute(assignment, teacherUsername, selectedDate);
+                      const showSubInfo =
+                        isOwner &&
+                        (isSubstitutionMode
+                          ? !!assignment.substituteTeacherUsername
+                          : hasActiveSubstitution(assignment, teacherUsername, selectedDate));
+                      const isRedSubCard = showSubInfo || isDelegated || (!isOwner && isSubForMe);
+                      const subTeacherName = assignment.substituteTeacherUsername
+                        ? teachers.find((t) => t.username === assignment.substituteTeacherUsername)?.fullName ||
+                          assignment.substituteTeacherUsername
+                        : '';
+
                       // Check if already checked on selectedDate
                       const isAlreadyChecked = teacherLogs.some(
                         (l) =>
@@ -580,37 +655,61 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
                           (l.periodId === assignment.periodId || l.periodId === period.id)
                       );
 
+                      const handleCardActivate = () => {
+                        if (isSubstitutionMode) {
+                          openSubModal(assignment);
+                        } else {
+                          handleSlotClick(assignment, day);
+                        }
+                      };
+
                       return (
                         <td key={period.id} className="p-2 border-r border-slate-200">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (isSubstitutionMode) {
-                                openSubModal(assignment);
-                              } else {
-                                handleSlotClick(assignment, day);
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={handleCardActivate}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleCardActivate();
                               }
                             }}
-                            className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between group ${
-                              isSubstitutionMode
-                                ? 'hover:scale-102 hover:shadow-md border-amber-300 bg-amber-50/40 ring-1 ring-amber-200'
+                            className={`w-full p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between group ${
+                              isRedSubCard
+                                ? isDelegated && !isSubstitutionMode
+                                  ? 'cursor-not-allowed bg-red-50 border-red-400 ring-1 ring-red-300'
+                                  : 'cursor-pointer hover:scale-102 hover:shadow-md bg-red-50 border-red-400 ring-1 ring-red-300'
+                                : isSubstitutionMode
+                                ? 'cursor-pointer hover:scale-102 hover:shadow-md border-amber-300 bg-amber-50/40 ring-1 ring-amber-200'
                                 : isSelectedDay
-                                ? 'hover:scale-102 hover:shadow-md border-teal-300 bg-white ring-1 ring-teal-200'
-                                : 'opacity-60 bg-slate-50 border-slate-200 hover:opacity-80'
+                                ? 'cursor-pointer hover:scale-102 hover:shadow-md border-teal-300 bg-white ring-1 ring-teal-200'
+                                : 'cursor-pointer opacity-70 bg-slate-50 border-slate-200 hover:opacity-90'
                             }`}
                           >
                             <div className="flex items-start justify-between gap-1 mb-1">
                               <span
                                 className="px-2 py-0.5 rounded-md text-[10px] text-white font-bold shadow-2xs"
-                                style={{ backgroundColor: assignment.color || '#0C7C82' }}
+                                style={{ backgroundColor: isRedSubCard ? '#DC2626' : (assignment.color || '#0C7C82') }}
                               >
                                 {assignment.className}
                               </span>
 
                               {isSubstitutionMode ? (
-                                <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-800 font-bold bg-amber-100 px-1.5 py-0.5 rounded-full border border-amber-200">
+                                <span
+                                  className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${
+                                    assignment.substituteTeacherUsername
+                                      ? 'text-red-700 bg-red-100 border-red-300'
+                                      : 'text-amber-800 bg-amber-100 border-amber-200'
+                                  }`}
+                                >
                                   <Edit2 className="w-3 h-3" />
-                                  <span>สอนแทน</span>
+                                  <span>{assignment.substituteTeacherUsername ? 'แก้ไขสอนแทน' : 'สอนแทน'}</span>
+                                </span>
+                              ) : isDelegated ? (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] text-red-700 font-bold bg-red-100 px-1.5 py-0.5 rounded-full border border-red-300">
+                                  <Lock className="w-3 h-3" />
+                                  <span>มอบสอนแทนแล้ว</span>
                                 </span>
                               ) : isSelectedDay ? (
                                 isAlreadyChecked ? (
@@ -629,23 +728,60 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
                             </div>
 
                             <div>
-                              <div className="font-extrabold text-[#0C7C82] text-[11px] truncate">
+                              <div className={`font-extrabold text-[11px] truncate ${isRedSubCard ? 'text-red-700' : 'text-[#0C7C82]'}`}>
                                 {assignment.subjectCode}
                               </div>
-                              <div className="text-[10px] font-semibold text-slate-800 truncate">
+                              <div className={`text-[10px] font-semibold truncate ${isRedSubCard ? 'text-red-950' : 'text-slate-800'}`}>
                                 {assignment.subjectName}
                               </div>
-                              {assignment.substituteTeacherUsername && (
-                                <div className="mt-1 text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200 inline-block">
-                                  สอนแทนโดย: {teachers.find((t) => t.username === assignment.substituteTeacherUsername)?.fullName || assignment.substituteTeacherUsername}
+
+                              {showSubInfo && (
+                                <div className="mt-1.5 space-y-1">
+                                  <div className="text-[10px] font-bold text-red-800 bg-red-100 px-1.5 py-0.5 rounded border border-red-300">
+                                    <div>สอนแทนโดย: {subTeacherName}</div>
+                                    {assignment.substituteDate && (
+                                      <div className="text-[9px] font-semibold text-red-700">
+                                        วันที่ {formatToThaiBE(assignment.substituteDate)}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div
+                                    className="flex items-center gap-1"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => openSubModal(assignment)}
+                                      className="flex-1 inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-white text-red-700 border border-red-300 hover:bg-red-100 transition-colors cursor-pointer"
+                                      title="แก้ไขการจัดสอนแทน"
+                                    >
+                                      <Edit2 className="w-2.5 h-2.5" />
+                                      <span>แก้ไข</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCancelSubstitution(assignment)}
+                                      className="flex-1 inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-red-600 text-white border border-red-600 hover:bg-red-700 transition-colors cursor-pointer"
+                                      title="ยกเลิกการสอนแทน"
+                                    >
+                                      <X className="w-2.5 h-2.5" />
+                                      <span>ยกเลิก</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {!isOwner && isSubForMe && (
+                                <div className="mt-1 text-[10px] font-bold text-red-800 bg-red-100 px-1.5 py-0.5 rounded border border-red-300 inline-block">
+                                  รับสอนแทน: {assignment.teacherName}
                                 </div>
                               )}
                             </div>
 
-                            <div className="text-[10px] font-mono text-slate-500 font-medium mt-2 pt-1 border-t border-slate-100">
+                            <div className={`text-[10px] font-mono font-medium mt-2 pt-1 border-t ${isRedSubCard ? 'text-red-700 border-red-200' : 'text-slate-500 border-slate-100'}`}>
                               {period.startTime} - {period.endTime}
                             </div>
-                          </button>
+                          </div>
                         </td>
                       );
                     })}
