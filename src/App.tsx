@@ -1150,6 +1150,9 @@ export default function App() {
                       students={currentYearStudents}
                       users={users}
                       attendanceLogs={currentYearAttendanceLogs}
+                      assignments={currentYearAssignments}
+                      periods={currentYearPeriods}
+                      settings={settings}
                       calendarEntries={currentYearCalendarEntries}
                       onNavigateTab={(tab) => {
                         if (tab === 'report' || tab === 'dashboard' || tab === 'daily-report' || tab === 'monthly-report') {
@@ -1235,6 +1238,9 @@ export default function App() {
                       students={currentYearStudents}
                       users={users}
                       attendanceLogs={currentYearAttendanceLogs}
+                      assignments={currentYearAssignments}
+                      periods={currentYearPeriods}
+                      settings={settings}
                       calendarEntries={currentYearCalendarEntries}
                       onNavigateTab={setCurrentTab}
                       academicYears={academicYears}

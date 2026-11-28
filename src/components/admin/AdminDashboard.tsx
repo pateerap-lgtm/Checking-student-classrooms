@@ -21,7 +21,14 @@ import {
   CalendarRange,
   CalendarDays,
   FileText,
-  LayoutDashboard
+  LayoutDashboard,
+  Eye,
+  FileDown,
+  Search,
+  X,
+  ArrowLeft,
+  ArrowRight,
+  Printer
 } from 'lucide-react';
 import { Chart, registerables } from 'chart.js';
 import {
@@ -37,10 +44,60 @@ import {
   YAxis,
   CartesianGrid
 } from 'recharts';
-import { Classroom, Subject, Student, AppUser, AttendanceLog, AcademicYear, SchoolCalendarEntry } from '../../types';
-import { resolveCalendarDateStatus } from '../../utils/thaiDate';
+import {
+  Classroom,
+  Subject,
+  Student,
+  AppUser,
+  AttendanceLog,
+  AcademicYear,
+  SchoolCalendarEntry,
+  TeachingAssignment,
+  Period,
+  SystemSettings
+} from '../../types';
+import {
+  formatThaiFullDate,
+  formatToThaiBE,
+  getAcademicYearMonths,
+  getTodayISODate,
+  resolveCalendarDateStatus,
+  YearMonthOption
+} from '../../utils/thaiDate';
+import { exportToExcel } from '../../utils/excel';
 
 Chart.register(...registerables);
+
+type DailyEvaluationStatus = 'present' | 'absent' | 'late' | 'sick' | 'leave';
+
+interface StudentDayDetail {
+  date: string;
+  dayOfWeek: string;
+  isOpenedNormal: boolean;
+  totalPeriodsInDay: number;
+  attendedPeriodsInDay: number;
+  attendancePercentInDay: number;
+  isPresentDay: boolean;
+  dayResult: DailyEvaluationStatus;
+  presentCount: number;
+  lateCount: number;
+  sickCount: number;
+  leaveCount: number;
+  absentCount: number;
+}
+
+interface StudentAbsenceSummaryRow {
+  student: Student;
+  className: string;
+  evaluatedDays: number;
+  presentDays: number;
+  absentDays: number;
+  lateDays: number;
+  sickDays: number;
+  leaveDays: number;
+  attendanceDayPercent: number;
+  dayDetails: StudentDayDetail[];
+}
 
 interface AdminDashboardProps {
   subjects: Subject[];
@@ -48,6 +105,9 @@ interface AdminDashboardProps {
   students: Student[];
   users: AppUser[];
   attendanceLogs: AttendanceLog[];
+  assignments?: TeachingAssignment[];
+  periods?: Period[];
+  settings?: SystemSettings;
   calendarEntries?: SchoolCalendarEntry[];
   onNavigateTab: (tabId: string) => void;
   academicYears?: AcademicYear[];
@@ -61,6 +121,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   students,
   users,
   attendanceLogs,
+  assignments = [],
+  periods = [],
+  settings,
   calendarEntries = [],
   onNavigateTab,
   academicYears = [],
@@ -91,6 +154,400 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!academicYears || academicYears.length === 0) return activeYear;
     return academicYears.find((y) => y.id === selectedYearId) || activeYear || academicYears[0];
   }, [academicYears, selectedYearId, activeYear]);
+
+  // Classroom Monthly Absence Report States (Admin Dashboard)
+  const sortedClasses = useMemo(
+    () => [...classes].sort((a, b) => a.name.localeCompare(b.name, 'th')),
+    [classes]
+  );
+
+  const reportMonthOptions = useMemo<YearMonthOption[]>(
+    () => getAcademicYearMonths(currentSelectedYear || activeYear),
+    [currentSelectedYear, activeYear]
+  );
+
+  const defaultReportMonthKey = useMemo(() => {
+    const now = new Date();
+    const curKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const found = reportMonthOptions.find((m) => m.key === curKey);
+    return found ? found.key : reportMonthOptions[0]?.key || curKey;
+  }, [reportMonthOptions]);
+
+  const [selectedReportClassId, setSelectedReportClassId] = useState<string>('');
+  const [selectedReportMonthKey, setSelectedReportMonthKey] = useState<string>(defaultReportMonthKey);
+  const [onlyUpToTodayReport, setOnlyUpToTodayReport] = useState<boolean>(true);
+  const [reportStudentSearch, setReportStudentSearch] = useState<string>('');
+  const [viewingStudentDetail, setViewingStudentDetail] = useState<StudentAbsenceSummaryRow | null>(null);
+
+  useEffect(() => {
+    if (sortedClasses.length === 0) {
+      if (selectedReportClassId !== 'ALL') setSelectedReportClassId('ALL');
+      return;
+    }
+    if (
+      !selectedReportClassId ||
+      (selectedReportClassId !== 'ALL' && !sortedClasses.some((c) => c.id === selectedReportClassId))
+    ) {
+      setSelectedReportClassId(sortedClasses[0].id);
+    }
+  }, [sortedClasses, selectedReportClassId]);
+
+  useEffect(() => {
+    if (reportMonthOptions.length === 0) return;
+    const exists = reportMonthOptions.some((m) => m.key === selectedReportMonthKey);
+    if (!exists) {
+      setSelectedReportMonthKey(defaultReportMonthKey);
+    }
+  }, [reportMonthOptions, selectedReportMonthKey, defaultReportMonthKey]);
+
+  const selectedReportMonthOption = useMemo(
+    () => reportMonthOptions.find((m) => m.key === selectedReportMonthKey) || reportMonthOptions[0],
+    [reportMonthOptions, selectedReportMonthKey]
+  );
+
+  const todayISODate = getTodayISODate();
+
+  const teachingPeriods = useMemo(
+    () => [...periods].filter((p) => !p.isLunchBreak).sort((a, b) => a.order - b.order),
+    [periods]
+  );
+
+  const openReportDates = useMemo(() => {
+    if (!selectedReportMonthOption) return [];
+    const { year, monthIndex } = selectedReportMonthOption;
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    const list: { date: string; dayOfWeek: string; isOpenedNormal: boolean }[] = [];
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      if (onlyUpToTodayReport && dateStr > todayISODate) continue;
+      const calStatus = resolveCalendarDateStatus(dateStr, calendarEntries);
+      if (calStatus.isHoliday || !calStatus.effectiveDayOfWeek) continue;
+      list.push({
+        date: dateStr,
+        dayOfWeek: calStatus.effectiveDayOfWeek,
+        isOpenedNormal: calStatus.isOpenedNormal
+      });
+    }
+    return list;
+  }, [selectedReportMonthOption, onlyUpToTodayReport, todayISODate, calendarEntries]);
+
+  const classAbsenceReport = useMemo(() => {
+    const getCoveredPeriodKeys = (
+      periodId?: string,
+      endPeriodId?: string,
+      fallbackName?: string
+    ): string[] => {
+      if (teachingPeriods.length > 0 && periodId) {
+        const startIdx = teachingPeriods.findIndex((p) => p.id === periodId);
+        if (startIdx !== -1) {
+          const endIdx = endPeriodId ? teachingPeriods.findIndex((p) => p.id === endPeriodId) : startIdx;
+          const realEnd = endIdx !== -1 && endIdx >= startIdx ? endIdx : startIdx;
+          return teachingPeriods.slice(startIdx, realEnd + 1).map((p) => `pid:${p.id}`);
+        }
+      }
+      if (periodId) return [`pid:${periodId}`];
+      if (fallbackName) return [`pname:${fallbackName}`];
+      return ['single'];
+    };
+
+    const targetClasses =
+      selectedReportClassId === 'ALL'
+        ? sortedClasses
+        : sortedClasses.filter((c) => c.id === selectedReportClassId);
+
+    if (targetClasses.length === 0) {
+      return { rows: [] as StudentAbsenceSummaryRow[], checkedDaysCount: 0 };
+    }
+
+    // Index logs in selected month
+    const monthLogsByDate = new Map<string, AttendanceLog[]>();
+    attendanceLogs.forEach((log) => {
+      if (!log.date.startsWith(selectedReportMonthKey)) return;
+      if (currentSelectedYear && log.academicYearId && log.academicYearId !== currentSelectedYear.id) {
+        return;
+      }
+      if (!monthLogsByDate.has(log.date)) monthLogsByDate.set(log.date, []);
+      monthLogsByDate.get(log.date)!.push(log);
+    });
+
+    const classMap = new Map<string, Classroom>();
+    targetClasses.forEach((c) => classMap.set(c.id, c));
+
+    const rows: StudentAbsenceSummaryRow[] = [];
+    const activeDatesAcrossTarget = new Set<string>();
+
+    targetClasses.forEach((cls) => {
+      const classStudents = students
+        .filter((s) => s.classId === cls.id || s.className === cls.name)
+        .sort((a, b) => {
+          const seqA = Number(a.seq || 0);
+          const seqB = Number(b.seq || 0);
+          if (seqA !== seqB) return seqA - seqB;
+          return a.name.localeCompare(b.name, 'th');
+        });
+
+      // Precompute day evaluations for this classroom
+      const dayContexts: {
+        date: string;
+        dayOfWeek: string;
+        isOpenedNormal: boolean;
+        totalPeriodsInDay: number;
+        logEntries: { log: AttendanceLog; periodKeys: string[] }[];
+      }[] = [];
+
+      openReportDates.forEach(({ date, dayOfWeek, isOpenedNormal }) => {
+        const dayLogs = (monthLogsByDate.get(date) || []).filter(
+          (l) => l.classId === cls.id || l.className === cls.name
+        );
+        // Evaluate only school days that have at least one attendance record for this classroom
+        if (dayLogs.length === 0) return;
+
+        activeDatesAcrossTarget.add(date);
+
+        const dayAssignments = assignments.filter(
+          (a) => a.dayOfWeek === dayOfWeek && (a.classId === cls.id || a.className === cls.name)
+        );
+
+        const dayPeriodKeys = new Set<string>();
+        dayAssignments.forEach((a) => {
+          getCoveredPeriodKeys(a.periodId, a.endPeriodId, a.periodName).forEach((k) =>
+            dayPeriodKeys.add(k)
+          );
+        });
+
+        const logEntries = dayLogs.map((log) => {
+          const matchedAssign = dayAssignments.find(
+            (a) =>
+              (log.subjectId === a.subjectId || log.subjectCode === a.subjectCode) &&
+              (log.periodId === a.periodId || log.periodName === a.periodName)
+          );
+          const periodKeys = getCoveredPeriodKeys(
+            log.periodId || matchedAssign?.periodId,
+            matchedAssign?.endPeriodId,
+            log.periodName || matchedAssign?.periodName
+          );
+          periodKeys.forEach((k) => dayPeriodKeys.add(k));
+          return { log, periodKeys };
+        });
+
+        const totalPeriodsInDay = dayPeriodKeys.size;
+        if (totalPeriodsInDay === 0) return;
+
+        dayContexts.push({
+          date,
+          dayOfWeek,
+          isOpenedNormal,
+          totalPeriodsInDay,
+          logEntries
+        });
+      });
+
+      classStudents.forEach((st) => {
+        let presentDays = 0;
+        let absentDays = 0;
+        let lateDays = 0;
+        let sickDays = 0;
+        let leaveDays = 0;
+        const dayDetails: StudentDayDetail[] = [];
+
+        dayContexts.forEach((ctx) => {
+          const attendedKeys = new Set<string>();
+          let presentCount = 0;
+          let lateCount = 0;
+          let sickCount = 0;
+          let leaveCount = 0;
+          let absentCount = 0;
+
+          ctx.logEntries.forEach(({ log, periodKeys }) => {
+            const rec = log.records?.find(
+              (r) => r.studentId === st.id || r.studentName === st.name
+            );
+            if (!rec) return;
+
+            const weight = periodKeys.length;
+            if (rec.status === 'present') {
+              periodKeys.forEach((k) => attendedKeys.add(k));
+              presentCount += weight;
+            } else if (rec.status === 'late') {
+              periodKeys.forEach((k) => attendedKeys.add(k));
+              lateCount += weight;
+            } else if (rec.status === 'sick') {
+              sickCount += weight;
+            } else if (rec.status === 'leave') {
+              leaveCount += weight;
+            } else if (rec.status === 'absent') {
+              absentCount += weight;
+            }
+          });
+
+          const attendedPeriodsInDay = attendedKeys.size;
+          const attendancePercentInDay = Math.round(
+            (attendedPeriodsInDay / ctx.totalPeriodsInDay) * 100
+          );
+          // More than 50% of total periods in 1 day -> Present/Late 1 day; otherwise Sick/Leave/Absent 1 day
+          const isPresentDay = attendedPeriodsInDay * 2 > ctx.totalPeriodsInDay;
+
+          let dayResult: DailyEvaluationStatus = 'absent';
+          if (isPresentDay) {
+            if (presentCount * 2 > ctx.totalPeriodsInDay) {
+              dayResult = 'present';
+              presentDays += 1;
+            } else {
+              dayResult = 'late';
+              lateDays += 1;
+            }
+          } else {
+            if (sickCount >= leaveCount && sickCount >= absentCount && sickCount > 0) {
+              dayResult = 'sick';
+              sickDays += 1;
+            } else if (leaveCount >= sickCount && leaveCount >= absentCount && leaveCount > 0) {
+              dayResult = 'leave';
+              leaveDays += 1;
+            } else {
+              dayResult = 'absent';
+              absentDays += 1;
+            }
+          }
+
+          dayDetails.push({
+            date: ctx.date,
+            dayOfWeek: ctx.dayOfWeek,
+            isOpenedNormal: ctx.isOpenedNormal,
+            totalPeriodsInDay: ctx.totalPeriodsInDay,
+            attendedPeriodsInDay,
+            attendancePercentInDay,
+            isPresentDay,
+            dayResult,
+            presentCount,
+            lateCount,
+            sickCount,
+            leaveCount,
+            absentCount
+          });
+        });
+
+        const evaluatedDays = dayDetails.length;
+        const attendedDaysTotal = presentDays + lateDays;
+        const attendanceDayPercent =
+          evaluatedDays > 0 ? Math.round((attendedDaysTotal / evaluatedDays) * 100) : 0;
+
+        rows.push({
+          student: st,
+          className: cls.name,
+          evaluatedDays,
+          presentDays,
+          absentDays,
+          lateDays,
+          sickDays,
+          leaveDays,
+          attendanceDayPercent,
+          dayDetails
+        });
+      });
+    });
+
+    const q = reportStudentSearch.trim().toLowerCase();
+    const filteredRows = q
+      ? rows.filter(
+          (r) =>
+            r.student.name.toLowerCase().includes(q) ||
+            (r.student.username || '').toLowerCase().includes(q) ||
+            r.className.toLowerCase().includes(q)
+        )
+      : rows;
+
+    return {
+      rows: filteredRows,
+      checkedDaysCount: activeDatesAcrossTarget.size
+    };
+  }, [
+    sortedClasses,
+    selectedReportClassId,
+    students,
+    openReportDates,
+    attendanceLogs,
+    selectedReportMonthKey,
+    currentSelectedYear,
+    assignments,
+    teachingPeriods,
+    reportStudentSearch
+  ]);
+
+  const classAbsenceKPI = useMemo(() => {
+    const totalStudents = classAbsenceReport.rows.length;
+    const totalPresentDays = classAbsenceReport.rows.reduce((acc, r) => acc + r.presentDays, 0);
+    const totalLateDays = classAbsenceReport.rows.reduce((acc, r) => acc + r.lateDays, 0);
+    const totalSickDays = classAbsenceReport.rows.reduce((acc, r) => acc + r.sickDays, 0);
+    const totalLeaveDays = classAbsenceReport.rows.reduce((acc, r) => acc + r.leaveDays, 0);
+    const totalAbsentDays = classAbsenceReport.rows.reduce((acc, r) => acc + r.absentDays, 0);
+    const studentsWithAbsence = classAbsenceReport.rows.filter((r) => r.absentDays > 0).length;
+    const totalEvaluated =
+      totalPresentDays + totalLateDays + totalSickDays + totalLeaveDays + totalAbsentDays;
+    const avgRate =
+      totalEvaluated > 0
+        ? (((totalPresentDays + totalLateDays) / totalEvaluated) * 100).toFixed(1)
+        : '0.0';
+    return {
+      totalStudents,
+      totalPresentDays,
+      totalLateDays,
+      totalSickDays,
+      totalLeaveDays,
+      totalAbsentDays,
+      studentsWithAbsence,
+      avgRate
+    };
+  }, [classAbsenceReport.rows]);
+
+  const selectedReportClassLabel = useMemo(() => {
+    if (selectedReportClassId === 'ALL') return `ทุกชั้นเรียน (${sortedClasses.length} ห้อง)`;
+    return sortedClasses.find((c) => c.id === selectedReportClassId)?.name || '-';
+  }, [selectedReportClassId, sortedClasses]);
+
+  const effectiveDirectorName = useMemo(() => {
+    if (settings?.directorName?.trim()) return settings.directorName.trim();
+    const dir = users.find((u) => u.role === 'director');
+    return dir?.fullName?.trim() || 'ผู้อำนวยการสถานศึกษา';
+  }, [settings?.directorName, users]);
+
+  const changeReportMonthByOffset = (offset: number) => {
+    const idx = reportMonthOptions.findIndex((m) => m.key === selectedReportMonthKey);
+    if (idx === -1) return;
+    const nextIdx = idx + offset;
+    if (nextIdx >= 0 && nextIdx < reportMonthOptions.length) {
+      setSelectedReportMonthKey(reportMonthOptions[nextIdx].key);
+    }
+  };
+
+  const handlePrintClassAbsencePDF = () => {
+    window.print();
+  };
+
+  const handleExportClassAbsenceExcel = () => {
+    const selectedClassObj = sortedClasses.find((c) => c.id === selectedReportClassId);
+    const classLabel =
+      selectedReportClassId === 'ALL' ? 'ทุกชั้นเรียน' : selectedClassObj?.name || 'ชั้นเรียน';
+    const exportRows = classAbsenceReport.rows.map((r, idx) => ({
+      'ลำดับ': idx + 1,
+      'เลขที่': r.student.seq || idx + 1,
+      'รหัสนักเรียน': r.student.username || '-',
+      'ชื่อ - นามสกุล': r.student.name,
+      'ชั้นเรียน': r.className,
+      'วันเรียนที่เช็ค (วัน)': r.evaluatedDays,
+      'มา (วัน)': r.presentDays,
+      'ขาด (วัน)': r.absentDays,
+      'สาย (วัน)': r.lateDays,
+      'ป่วย (วัน)': r.sickDays,
+      'กิจ (วัน)': r.leaveDays,
+      'ร้อยละมาเรียน (%)': `${r.attendanceDayPercent}%`
+    }));
+    exportToExcel(
+      exportRows,
+      `สรุปการขาดเรียนรายชั้น_${classLabel}_${selectedReportMonthOption?.label || selectedReportMonthKey}`,
+      'สรุปวันขาดเรียน'
+    );
+  };
 
   // Filter Attendance Logs by Year & Semester (excluding holiday dates)
   const filteredAttendanceLogs = useMemo(() => {
@@ -350,7 +807,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   return (
     <div className="space-y-6">
       {/* Mobile-only iPhone-like Quick App Shortcut Icons Grid */}
-      <div className="block lg:hidden bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-3xl p-5 shadow-xl">
+      <div className="block lg:hidden bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-3xl p-5 shadow-xl no-print">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -489,7 +946,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* Main Top Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 no-print">
         {/* Total Subjects Card */}
         <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-3">
@@ -584,8 +1041,378 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
+      {/* Admin Monthly Classroom Absence Report Section */}
+      {currentUserRole === 'admin' && (
+        <div className="bg-white rounded-3xl p-6 lg:p-7 border border-slate-100 shadow-xs space-y-5 print:border-none print:shadow-none print:rounded-none print:p-0">
+          {/* Official Print Header */}
+          <div className="hidden print:block p-4 border-b-2 border-slate-800 text-center space-y-2 mb-4">
+            <div className="flex items-center justify-center gap-3">
+              {settings?.logoUrl ? (
+                <img src={settings.logoUrl} alt="Logo" className="w-14 h-14 object-contain" />
+              ) : (
+                <School className="w-12 h-12 text-slate-800" />
+              )}
+              <div className="text-left">
+                <h1 className="text-lg font-bold text-slate-900 leading-tight">
+                  {settings?.schoolName || 'โรงเรียน'}
+                </h1>
+                <p className="text-xs text-slate-700">
+                  {settings?.affiliationName || 'สำนักงานเขตพื้นที่การศึกษา'}
+                </p>
+              </div>
+            </div>
+            <div className="pt-1">
+              <h2 className="text-base font-bold text-slate-900">
+                รายงานสรุปจำนวนวันมาเรียน - ขาดเรียนรายชั้นเรียน ประจำเดือน
+              </h2>
+              <p className="text-xs text-slate-800 mt-0.5">
+                ชั้นเรียน: <strong>{selectedReportClassLabel}</strong> | ประจำเดือน:{' '}
+                <strong>{selectedReportMonthOption?.label}</strong> | ปีการศึกษา:{' '}
+                <strong>{currentSelectedYear?.name || activeYear?.name || '2569'}</strong>
+              </p>
+              <p className="text-[11px] text-slate-700 mt-0.5">
+                จำนวนนักเรียน: {classAbsenceKPI.totalStudents} คน | วันเปิดเรียนที่เช็คชื่อ:{' '}
+                {classAbsenceReport.checkedDaysCount} วัน | อัตรามาเรียนเฉลี่ย: {classAbsenceKPI.avgRate}%
+              </p>
+            </div>
+          </div>
+
+          {/* Section Header (No Print) */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-100 no-print">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#0C7C82] to-[#35B4B0] text-white flex items-center justify-center shrink-0 shadow-md shadow-[#0C7C82]/20">
+                <CalendarDays className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-lg font-bold text-slate-800">
+                    รายงานสรุปจำนวนวันขาดเรียนรายชั้นเรียน ประจำเดือน
+                  </h3>
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-teal-50 text-[#0C7C82] font-semibold border border-teal-100">
+                    {selectedReportMonthOption?.label}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  เกณฑ์การคำนวณ: 1 วัน = จำนวนคาบเรียนทั้งหมดในวันนั้น หากมาเรียน (มา/สาย) เกิน 50% ของจำนวนคาบทั้งหมดใน 1 วัน คิดเป็นมาเรียน 1 วัน (ไม่เกิน 50% แยกเป็น ขาด/ป่วย/กิจ 1 วัน)
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 flex-wrap self-start lg:self-auto">
+              <button
+                type="button"
+                onClick={handleExportClassAbsenceExcel}
+                disabled={classAbsenceReport.rows.length === 0}
+                className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 font-semibold text-xs shadow-2xs transition-all cursor-pointer"
+              >
+                <FileDown className="w-4 h-4 text-emerald-600" />
+                <span>ส่งออก Excel</span>
+              </button>
+              <button
+                type="button"
+                onClick={handlePrintClassAbsencePDF}
+                disabled={classAbsenceReport.rows.length === 0}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#0C7C82] to-[#35B4B0] text-white font-semibold text-xs shadow-md shadow-[#0C7C82]/20 hover:opacity-95 disabled:opacity-50 transition-all cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                <span>พิมพ์ PDF</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Filters: Classroom Dropdown List, Month Picker, Search (No Print) */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end no-print">
+            {/* Classroom Dropdown List */}
+            <div className="md:col-span-4 space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700">
+                ชั้นเรียน (Dropdown List)
+              </label>
+              <select
+                value={selectedReportClassId}
+                onChange={(e) => setSelectedReportClassId(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-800 bg-slate-50/50 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] cursor-pointer"
+              >
+                {sortedClasses.map((cls) => (
+                  <option key={cls.id} value={cls.id}>
+                    {cls.name}
+                  </option>
+                ))}
+                <option value="ALL">ทุกชั้นเรียน ({sortedClasses.length} ห้อง)</option>
+              </select>
+            </div>
+
+            {/* Month Picker */}
+            <div className="md:col-span-4 space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700">เลือกเดือน</label>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => changeReportMonthByOffset(-1)}
+                  className="p-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  title="เดือนก่อนหน้า"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <select
+                  value={selectedReportMonthKey}
+                  onChange={(e) => setSelectedReportMonthKey(e.target.value)}
+                  className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-800 bg-slate-50/50 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] cursor-pointer"
+                >
+                  {reportMonthOptions.map((opt) => (
+                    <option key={opt.key} value={opt.key}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => changeReportMonthByOffset(1)}
+                  className="p-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  title="เดือนถัดไป"
+                >
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Search Student */}
+            <div className="md:col-span-4 space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700">ค้นหานักเรียน</label>
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={reportStudentSearch}
+                  onChange={(e) => setReportStudentSearch(e.target.value)}
+                  placeholder="ชื่อนักเรียน / รหัสนักเรียน..."
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82]"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Sub-option + Formula Info (No Print) */}
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs no-print">
+            <label className="inline-flex items-center gap-2 font-semibold text-slate-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={onlyUpToTodayReport}
+                onChange={(e) => setOnlyUpToTodayReport(e.target.checked)}
+                className="w-4 h-4 rounded text-[#0C7C82] focus:ring-[#0C7C82] border-slate-300 cursor-pointer"
+              />
+              <span>
+                ประมวลผลถึงวันที่ปัจจุบัน ({formatToThaiBE(todayISODate)}) ไม่รวมวันหยุดและวันเปิดเรียนที่ยังไม่มีการเช็คชื่อ
+              </span>
+            </label>
+            <span className="text-[11px] font-semibold text-slate-500">
+              วันเปิดเรียนที่เช็คชื่อในเดือน: <strong className="text-slate-800">{classAbsenceReport.checkedDaysCount}</strong> วัน
+            </span>
+          </div>
+
+          {/* Mini KPI Summary (No Print) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 no-print">
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+              <div className="text-[11px] font-bold text-slate-600">จำนวนนักเรียน</div>
+              <div className="text-xl font-extrabold text-slate-800 mt-0.5">
+                {classAbsenceKPI.totalStudents} <span className="text-xs font-medium text-slate-500">คน</span>
+              </div>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-teal-50/70 border border-teal-100">
+              <div className="text-[11px] font-bold text-teal-800">อัตราการมาเรียนเฉลี่ย</div>
+              <div className="text-xl font-extrabold text-[#0C7C82] mt-0.5">
+                {classAbsenceKPI.avgRate}%
+              </div>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-100">
+              <div className="text-[11px] font-bold text-emerald-800">รวมวันมาเรียน (มา / สาย)</div>
+              <div className="text-xl font-extrabold text-emerald-700 mt-0.5">
+                {(classAbsenceKPI.totalPresentDays + classAbsenceKPI.totalLateDays).toLocaleString()}{' '}
+                <span className="text-xs font-medium text-emerald-600">
+                  คน-วัน (มา {classAbsenceKPI.totalPresentDays} • สาย {classAbsenceKPI.totalLateDays})
+                </span>
+              </div>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-100">
+              <div className="text-[11px] font-bold text-rose-800">
+                รวมวันขาด/ลา ({classAbsenceKPI.studentsWithAbsence} คนที่มีขาด)
+              </div>
+              <div className="text-xl font-extrabold text-rose-700 mt-0.5">
+                {classAbsenceKPI.totalAbsentDays.toLocaleString()}{' '}
+                <span className="text-xs font-medium text-rose-600">
+                  ขาด (ป่วย {classAbsenceKPI.totalSickDays} • กิจ {classAbsenceKPI.totalLeaveDays})
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Student Absence Summary Table */}
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 print:border-slate-800 print:rounded-none">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold text-[11px] print:bg-slate-100 print:text-black print:border-slate-800">
+                  <th className="py-3 px-2.5 text-center w-11 border-r border-slate-200 print:border-slate-800">ลำดับ</th>
+                  <th className="py-3 px-2.5 text-center w-12 border-r border-slate-200 print:border-slate-800">เลขที่</th>
+                  <th className="py-3 px-2.5 border-r border-slate-200 print:border-slate-800 w-24">รหัสนักเรียน</th>
+                  <th className="py-3 px-3 border-r border-slate-200 print:border-slate-800 min-w-[160px]">ชื่อ - นามสกุล</th>
+                  {selectedReportClassId === 'ALL' && (
+                    <th className="py-3 px-2.5 border-r border-slate-200 print:border-slate-800 w-24">ชั้นเรียน</th>
+                  )}
+                  <th className="py-3 px-2 text-center w-20 border-r border-slate-200 print:border-slate-800">
+                    วันเรียน (วัน)
+                  </th>
+                  <th className="py-3 px-2 text-center w-14 text-emerald-700 border-r border-slate-200 print:border-slate-800">
+                    มา
+                  </th>
+                  <th className="py-3 px-2 text-center w-14 text-rose-600 border-r border-slate-200 print:border-slate-800">
+                    ขาด
+                  </th>
+                  <th className="py-3 px-2 text-center w-14 text-amber-600 border-r border-slate-200 print:border-slate-800">
+                    สาย
+                  </th>
+                  <th className="py-3 px-2 text-center w-14 text-sky-600 border-r border-slate-200 print:border-slate-800">
+                    ป่วย
+                  </th>
+                  <th className="py-3 px-2 text-center w-14 text-orange-600 border-r border-slate-200 print:border-slate-800">
+                    กิจ
+                  </th>
+                  <th className="py-3 px-2.5 text-center w-24 border-r border-slate-200 print:border-slate-800 print:border-r-0">
+                    ร้อยละมาเรียน
+                  </th>
+                  <th className="py-3 px-2.5 text-center w-24 no-print">รายละเอียด</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 print:divide-slate-800">
+                {classAbsenceReport.rows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={selectedReportClassId === 'ALL' ? 13 : 12}
+                      className="py-10 text-center text-slate-400"
+                    >
+                      <AlertCircle className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                      <p className="font-semibold text-slate-600 text-sm">
+                        ไม่พบข้อมูลนักเรียนในชั้นเรียนหรือเดือนที่เลือก
+                      </p>
+                    </td>
+                  </tr>
+                ) : (
+                  classAbsenceReport.rows.map((row, idx) => (
+                    <tr
+                      key={row.student.id}
+                      className={
+                        row.absentDays > 0
+                          ? 'bg-rose-50/20 hover:bg-rose-50/40 print:bg-white'
+                          : 'bg-white hover:bg-slate-50/70'
+                      }
+                    >
+                      <td className="py-2.5 px-2.5 text-center font-bold text-slate-500 border-r border-slate-100 print:border-slate-800">
+                        {idx + 1}
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center font-semibold text-slate-600 border-r border-slate-100 print:border-slate-800">
+                        {row.student.seq || idx + 1}
+                      </td>
+                      <td className="py-2.5 px-2.5 font-mono text-slate-600 border-r border-slate-100 print:border-slate-800">
+                        {row.student.username || '-'}
+                      </td>
+                      <td className="py-2.5 px-3 font-bold text-slate-800 border-r border-slate-100 print:border-slate-800">
+                        {row.student.name}
+                      </td>
+                      {selectedReportClassId === 'ALL' && (
+                        <td className="py-2.5 px-2.5 font-semibold text-[#0C7C82] border-r border-slate-100 print:border-slate-800 print:text-black">
+                          {row.className}
+                        </td>
+                      )}
+                      <td className="py-2.5 px-2 text-center font-bold text-slate-700 border-r border-slate-100 print:border-slate-800">
+                        {row.evaluatedDays}
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-bold text-emerald-700 border-r border-slate-100 print:border-slate-800">
+                        {row.presentDays}
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-bold border-r border-slate-100 print:border-slate-800">
+                        {row.absentDays > 0 ? (
+                          <span className="inline-flex items-center justify-center min-w-[1.75rem] px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700 font-extrabold print:bg-transparent print:text-black">
+                            {row.absentDays}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 print:text-black">0</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-bold text-amber-600 border-r border-slate-100 print:border-slate-800 print:text-black">
+                        {row.lateDays}
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-bold text-sky-600 border-r border-slate-100 print:border-slate-800 print:text-black">
+                        {row.sickDays}
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-bold text-orange-600 border-r border-slate-100 print:border-slate-800 print:text-black">
+                        {row.leaveDays}
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center font-bold border-r border-slate-100 print:border-slate-800 print:border-r-0">
+                        <span
+                          className={
+                            row.evaluatedDays === 0
+                              ? 'text-slate-400'
+                              : row.attendanceDayPercent >= 80
+                              ? 'text-emerald-700'
+                              : row.attendanceDayPercent >= 60
+                              ? 'text-amber-700'
+                              : 'text-rose-700'
+                          }
+                        >
+                          {row.evaluatedDays > 0 ? `${row.attendanceDayPercent}%` : '-'}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center no-print">
+                        <button
+                          type="button"
+                          onClick={() => setViewingStudentDetail(row)}
+                          disabled={row.evaluatedDays === 0}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-teal-50 text-[#0C7C82] hover:bg-teal-100 disabled:opacity-40 cursor-pointer"
+                          title="ดูรายละเอียดรายวัน"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>ดูรายวัน</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Print Only Signature Block */}
+          <div className="hidden print:block pt-10 px-4 pb-4 text-center text-xs text-slate-800 print:break-inside-avoid">
+            <div className="grid grid-cols-3 gap-6">
+              <div className="space-y-4">
+                <p className="leading-relaxed">ลงชื่อ........................................................</p>
+                <p className="font-semibold">(........................................................)</p>
+                <p className="text-[11px] text-slate-600">ผู้รายงาน / ผู้ดูแลระบบ</p>
+                <p className="text-[10px] text-slate-500">
+                  วันที่ ...... เดือน ..................... พ.ศ. ...........
+                </p>
+              </div>
+              <div className="space-y-4">
+                <p className="leading-relaxed">ลงชื่อ........................................................</p>
+                <p className="font-semibold">(........................................................)</p>
+                <p className="text-[11px] text-slate-600">หัวหน้าฝ่ายวิชาการ</p>
+                <p className="text-[10px] text-slate-500">
+                  วันที่ ...... เดือน ..................... พ.ศ. ...........
+                </p>
+              </div>
+              <div className="space-y-4">
+                <p className="leading-relaxed">ลงชื่อ........................................................</p>
+                <p className="font-semibold">({effectiveDirectorName})</p>
+                <p className="text-[11px] text-slate-800 font-bold">ผู้อำนวยการสถานศึกษา</p>
+                <p className="text-[10px] text-slate-500">
+                  วันที่ ...... เดือน ..................... พ.ศ. ...........
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Recharts Attendance Summary Section for Entire School by Semester */}
-      <div className="bg-white rounded-3xl p-6 lg:p-7 border border-slate-100 shadow-xs space-y-6">
+      <div className="bg-white rounded-3xl p-6 lg:p-7 border border-slate-100 shadow-xs space-y-6 no-print">
         {/* Section Header and Controls */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-100">
           <div className="flex items-start sm:items-center gap-3">
@@ -1098,7 +1925,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* Progress fill for each class type / class list */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs">
+      <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs no-print">
         <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-[#0C7C82]" />
           <span>สัดส่วนและจำนวนนักเรียนแยกตามแต่ละชั้นเรียน</span>
@@ -1150,7 +1977,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* Charts Section with <div><canvas></div> as required */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 no-print">
         {/* Donut Chart: Subjects by Category */}
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs flex flex-col">
           <div className="flex items-center justify-between mb-4">
@@ -1183,6 +2010,122 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Student Monthly Day-by-Day Absence Detail Modal */}
+      {viewingStudentDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs no-print">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-start justify-between bg-slate-50">
+              <div>
+                <h3 className="font-bold text-slate-800 text-base">
+                  รายละเอียดการมาเรียนรายวัน: {viewingStudentDetail.student.name}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  ชั้นเรียน <strong>{viewingStudentDetail.className}</strong> • เดือน{' '}
+                  <strong>{selectedReportMonthOption?.label}</strong> • มา{' '}
+                  <strong className="text-emerald-700">{viewingStudentDetail.presentDays}</strong> • ขาด{' '}
+                  <strong className="text-rose-700">{viewingStudentDetail.absentDays}</strong> • สาย{' '}
+                  <strong className="text-amber-600">{viewingStudentDetail.lateDays}</strong> • ป่วย{' '}
+                  <strong className="text-sky-600">{viewingStudentDetail.sickDays}</strong> • กิจ{' '}
+                  <strong className="text-orange-600">{viewingStudentDetail.leaveDays}</strong> วัน
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingStudentDetail(null)}
+                className="p-1 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-5 py-3 bg-teal-50/70 border-b border-teal-100 text-[11px] text-teal-900 font-medium">
+              เกณฑ์: หากคาบที่มาเรียน (มา/สาย) มากกว่า 50% ของจำนวนคาบทั้งหมดในวันนั้น คิดเป็น <strong>มา/สาย 1 วัน</strong> (ไม่เกิน 50% แยกเป็น <strong>ขาด/ป่วย/กิจ 1 วัน</strong>)
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              <table className="w-full text-left text-xs border-collapse border border-slate-200 rounded-xl overflow-hidden">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold text-[11px]">
+                    <th className="py-2.5 px-3 border-r border-slate-200">วันที่</th>
+                    <th className="py-2.5 px-2.5 text-center border-r border-slate-200 w-24">คาบทั้งหมด</th>
+                    <th className="py-2.5 px-2 text-center text-emerald-700 border-r border-slate-200 w-14">มา</th>
+                    <th className="py-2.5 px-2 text-center text-rose-600 border-r border-slate-200 w-14">ขาด</th>
+                    <th className="py-2.5 px-2 text-center text-amber-600 border-r border-slate-200 w-14">สาย</th>
+                    <th className="py-2.5 px-2 text-center text-sky-600 border-r border-slate-200 w-14">ป่วย</th>
+                    <th className="py-2.5 px-2 text-center text-orange-600 w-14">กิจ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {viewingStudentDetail.dayDetails.map((d) => (
+                    <tr key={d.date} className={d.isPresentDay ? 'bg-white' : 'bg-rose-50/40'}>
+                      <td className="py-2.5 px-3 border-r border-slate-100">
+                        <div className="font-semibold text-slate-800">{formatThaiFullDate(d.date)}</div>
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <span
+                            className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              d.dayResult === 'present'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : d.dayResult === 'late'
+                                ? 'bg-amber-100 text-amber-800'
+                                : d.dayResult === 'sick'
+                                ? 'bg-sky-100 text-sky-800'
+                                : d.dayResult === 'leave'
+                                ? 'bg-orange-100 text-orange-800'
+                                : 'bg-rose-100 text-rose-700'
+                            }`}
+                          >
+                            {d.dayResult === 'present'
+                              ? 'มา 1 วัน'
+                              : d.dayResult === 'late'
+                              ? 'สาย 1 วัน'
+                              : d.dayResult === 'sick'
+                              ? 'ป่วย 1 วัน'
+                              : d.dayResult === 'leave'
+                              ? 'กิจ 1 วัน'
+                              : 'ขาด 1 วัน'}
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            (มาเรียน {d.attendancePercentInDay}%)
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center font-bold text-slate-700 border-r border-slate-100">
+                        {d.totalPeriodsInDay}
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-bold text-emerald-700 border-r border-slate-100">
+                        {d.presentCount}
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-bold text-rose-600 border-r border-slate-100">
+                        {d.absentCount}
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-bold text-amber-600 border-r border-slate-100">
+                        {d.lateCount}
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-bold text-sky-600 border-r border-slate-100">
+                        {d.sickCount}
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-bold text-orange-600">
+                        {d.leaveCount}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-4 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewingStudentDetail(null)}
+                className="px-4 py-2 rounded-xl text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

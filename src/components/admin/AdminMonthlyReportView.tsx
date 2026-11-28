@@ -106,6 +106,11 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
     return found ? found.key : monthOptions[0]?.key || curKey;
   }, [monthOptions]);
 
+  const sortedTeachers = useMemo(
+    () => [...teachers].sort((a, b) => a.fullName.localeCompare(b.fullName, 'th')),
+    [teachers]
+  );
+
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>(initialMonthKey);
   const [selectedTeacherUsername, setSelectedTeacherUsername] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<MonthlyStatusFilter>('all');
@@ -119,11 +124,6 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
   const selectedMonthOption = useMemo(
     () => monthOptions.find((m) => m.key === selectedMonthKey) || monthOptions[0],
     [monthOptions, selectedMonthKey]
-  );
-
-  const sortedTeachers = useMemo(
-    () => [...teachers].sort((a, b) => a.fullName.localeCompare(b.fullName, 'th')),
-    [teachers]
   );
 
   const teacherNameMap = useMemo(() => {
@@ -347,7 +347,6 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
       }
     >();
 
-    // Seed all teachers if viewing ALL and no search
     if (selectedTeacherUsername === 'ALL' && !searchTerm.trim()) {
       sortedTeachers.forEach((t) => {
         map.set(t.username, {
@@ -522,7 +521,7 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
 
   const selectedTeacherLabel =
     selectedTeacherUsername === 'ALL'
-      ? 'ครูทุกคน (ทั้งหมด)'
+      ? 'ครูทั้งหมด'
       : getTeacherName(selectedTeacherUsername);
 
   const handleExportExcel = () => {
@@ -534,12 +533,7 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
         'คาบตามตารางทั้งหมด': t.totalPeriods,
         'เช็คชื่อแล้ว (คาบ)': t.checkedPeriods,
         'ยังไม่เช็คชื่อ (คาบ)': t.uncheckedPeriods,
-        'ร้อยละการเช็คชื่อ (%)': `${t.percent}%`,
-        'มาเรียนรวม': t.present,
-        'ขาดรวม': t.absent,
-        'สายรวม': t.late,
-        'ป่วยรวม': t.sick,
-        'กิจรวม': t.leave
+        'ร้อยละการเช็คชื่อ (%)': `${t.percent}%`
       }));
       exportToExcel(
         rows,
@@ -554,12 +548,7 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
         'คาบทั้งหมด': d.totalPeriods,
         'เช็คชื่อแล้ว': d.checkedPeriods,
         'ยังไม่เช็คชื่อ': d.uncheckedPeriods,
-        'ร้อยละความครบถ้วน': `${d.percent}%`,
-        'มาเรียน': d.present,
-        'ขาด': d.absent,
-        'สาย': d.late,
-        'ป่วย': d.sick,
-        'กิจ': d.leave
+        'ร้อยละความครบถ้วน': `${d.percent}%`
       }));
       exportToExcel(
         rows,
@@ -634,7 +623,7 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#0C7C82] to-[#35B4B0] text-white font-semibold text-xs shadow-md shadow-[#0C7C82]/20 hover:opacity-95 transition-all cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              <span>พิมพ์ PDF (window.print())</span>
+              <span>พิมพ์ PDF</span>
             </button>
           </div>
         </div>
@@ -687,11 +676,13 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
                 setSelectedTeacherUsername(val);
                 if (val !== 'ALL' && viewTab === 'by_teacher') {
                   setViewTab('by_date');
+                } else if (val === 'ALL' && viewTab === 'by_date') {
+                  setViewTab('by_teacher');
                 }
               }}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-800 bg-slate-50/50 focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] cursor-pointer"
             >
-              <option value="ALL">ทั้งหมด (ครูทุกคน • {sortedTeachers.length} ท่าน)</option>
+              <option value="ALL">ครูทั้งหมด ({sortedTeachers.length} ท่าน)</option>
               {sortedTeachers.map((t) => (
                 <option key={t.id} value={t.username}>
                   {t.fullName}
@@ -932,23 +923,8 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
                   <th className="py-3 px-3 text-center w-24 text-red-600 border-r border-slate-200 print:border-slate-800">
                     ยังไม่เช็ค
                   </th>
-                  <th className="py-3 px-3 text-center w-24 border-r border-slate-200 print:border-slate-800">
+                  <th className="py-3 px-3 text-center w-24 border-r border-slate-200 print:border-slate-800 print:border-r-0">
                     ร้อยละ (%)
-                  </th>
-                  <th className="py-3 px-2 text-center w-14 text-emerald-700 border-r border-slate-200 print:border-slate-800">
-                    มา
-                  </th>
-                  <th className="py-3 px-2 text-center w-14 text-red-600 border-r border-slate-200 print:border-slate-800">
-                    ขาด
-                  </th>
-                  <th className="py-3 px-2 text-center w-14 text-amber-600 border-r border-slate-200 print:border-slate-800">
-                    สาย
-                  </th>
-                  <th className="py-3 px-2 text-center w-14 text-sky-600 border-r border-slate-200 print:border-slate-800">
-                    ป่วย
-                  </th>
-                  <th className="py-3 px-2 text-center w-14 text-orange-600 border-r border-slate-200 print:border-slate-800">
-                    กิจ
                   </th>
                   <th className="py-3 px-3 text-center w-24 no-print">ดูรายวัน</th>
                 </tr>
@@ -956,7 +932,7 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
               <tbody className="divide-y divide-slate-100 print:divide-slate-800">
                 {teacherMonthlySummaries.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="py-12 text-center text-slate-400">
+                    <td colSpan={8} className="py-12 text-center text-slate-400">
                       <CalendarRange className="w-8 h-8 mx-auto text-slate-300 mb-2" />
                       <p className="font-semibold text-slate-600 text-sm">
                         ไม่พบข้อมูลการเช็คชื่อในเดือน {selectedMonthOption?.label}
@@ -990,7 +966,7 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
                           <span className="text-slate-400">0</span>
                         )}
                       </td>
-                      <td className="py-3 px-3 text-center font-bold border-r border-slate-100 print:border-slate-800">
+                      <td className="py-3 px-3 text-center font-bold border-r border-slate-100 print:border-slate-800 print:border-r-0">
                         <span
                           className={
                             row.percent === 100
@@ -1002,21 +978,6 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
                         >
                           {row.percent}%
                         </span>
-                      </td>
-                      <td className="py-3 px-2 text-center font-semibold text-emerald-700 border-r border-slate-100 print:border-slate-800">
-                        {row.present}
-                      </td>
-                      <td className="py-3 px-2 text-center font-semibold text-red-600 border-r border-slate-100 print:border-slate-800">
-                        {row.absent}
-                      </td>
-                      <td className="py-3 px-2 text-center font-semibold text-amber-600 border-r border-slate-100 print:border-slate-800">
-                        {row.late}
-                      </td>
-                      <td className="py-3 px-2 text-center font-semibold text-sky-600 border-r border-slate-100 print:border-slate-800">
-                        {row.sick}
-                      </td>
-                      <td className="py-3 px-2 text-center font-semibold text-orange-600 border-r border-slate-100 print:border-slate-800">
-                        {row.leave}
                       </td>
                       <td className="py-3 px-3 text-center no-print">
                         <button
@@ -1062,30 +1023,15 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
                   <th className="py-3 px-3 text-center w-24 text-red-600 border-r border-slate-200 print:border-slate-800">
                     ยังไม่เช็ค
                   </th>
-                  <th className="py-3 px-3 text-center w-24 border-r border-slate-200 print:border-slate-800">
+                  <th className="py-3 px-3 text-center w-24 print:border-slate-800">
                     ร้อยละ (%)
-                  </th>
-                  <th className="py-3 px-2 text-center w-14 text-emerald-700 border-r border-slate-200 print:border-slate-800">
-                    มา
-                  </th>
-                  <th className="py-3 px-2 text-center w-14 text-red-600 border-r border-slate-200 print:border-slate-800">
-                    ขาด
-                  </th>
-                  <th className="py-3 px-2 text-center w-14 text-amber-600 border-r border-slate-200 print:border-slate-800">
-                    สาย
-                  </th>
-                  <th className="py-3 px-2 text-center w-14 text-sky-600 border-r border-slate-200 print:border-slate-800">
-                    ป่วย
-                  </th>
-                  <th className="py-3 px-2 text-center w-14 text-orange-600 print:border-slate-800">
-                    กิจ
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 print:divide-slate-800">
                 {dailySummaries.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-12 text-center text-slate-400">
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
                       <Calendar className="w-8 h-8 mx-auto text-slate-300 mb-2" />
                       <p className="font-semibold text-slate-600 text-sm">
                         ไม่พบข้อมูลรายวันตามเงื่อนไขในเดือน {selectedMonthOption?.label}
@@ -1118,23 +1064,8 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
                       <td className="py-3 px-3 text-center font-bold text-red-600 border-r border-slate-100 print:border-slate-800">
                         {d.uncheckedPeriods}
                       </td>
-                      <td className="py-3 px-3 text-center font-bold text-slate-800 border-r border-slate-100 print:border-slate-800">
+                      <td className="py-3 px-3 text-center font-bold text-slate-800 print:border-slate-800">
                         {d.percent}%
-                      </td>
-                      <td className="py-3 px-2 text-center font-semibold text-emerald-700 border-r border-slate-100 print:border-slate-800">
-                        {d.present}
-                      </td>
-                      <td className="py-3 px-2 text-center font-semibold text-red-600 border-r border-slate-100 print:border-slate-800">
-                        {d.absent}
-                      </td>
-                      <td className="py-3 px-2 text-center font-semibold text-amber-600 border-r border-slate-100 print:border-slate-800">
-                        {d.late}
-                      </td>
-                      <td className="py-3 px-2 text-center font-semibold text-sky-600 border-r border-slate-100 print:border-slate-800">
-                        {d.sick}
-                      </td>
-                      <td className="py-3 px-2 text-center font-semibold text-orange-600 print:border-slate-800">
-                        {d.leave}
                       </td>
                     </tr>
                   ))
@@ -1165,22 +1096,22 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
                   <th className="py-3 px-3 border-r border-slate-200 print:border-slate-800 min-w-[110px]">
                     คาบสอน
                   </th>
-                  <th className="py-3 px-3 border-r border-slate-200 print:border-slate-800 min-w-[170px]">
+                  <th className="py-3 px-3 border-r border-slate-200 print:border-slate-800 print:border-r-0 min-w-[170px]">
                     รายวิชา / ชั้นเรียน
                   </th>
-                  <th className="py-3 px-2 text-center w-12 text-emerald-700 border-r border-slate-200 print:border-slate-800">
+                  <th className="py-3 px-2 text-center w-12 text-emerald-700 border-r border-slate-200 no-print">
                     มา
                   </th>
-                  <th className="py-3 px-2 text-center w-12 text-red-600 border-r border-slate-200 print:border-slate-800">
+                  <th className="py-3 px-2 text-center w-12 text-red-600 border-r border-slate-200 no-print">
                     ขาด
                   </th>
-                  <th className="py-3 px-2 text-center w-12 text-amber-600 border-r border-slate-200 print:border-slate-800">
+                  <th className="py-3 px-2 text-center w-12 text-amber-600 border-r border-slate-200 no-print">
                     สาย
                   </th>
-                  <th className="py-3 px-2 text-center w-12 text-sky-600 border-r border-slate-200 print:border-slate-800">
+                  <th className="py-3 px-2 text-center w-12 text-sky-600 border-r border-slate-200 no-print">
                     ป่วย
                   </th>
-                  <th className="py-3 px-2 text-center w-12 text-orange-600 border-r border-slate-200 print:border-slate-800">
+                  <th className="py-3 px-2 text-center w-12 text-orange-600 border-r border-slate-200 no-print">
                     กิจ
                   </th>
                   <th className="py-3 px-3 text-center w-20 no-print">ดูข้อมูล</th>
@@ -1232,25 +1163,25 @@ export const AdminMonthlyReportView: React.FC<AdminMonthlyReportViewProps> = ({
                         <div className="font-semibold text-slate-800">{slot.periodName}</div>
                         <div className="text-[10px] text-slate-500">{slot.periodTime}</div>
                       </td>
-                      <td className="py-3 px-3 border-r border-slate-100 print:border-slate-800">
+                      <td className="py-3 px-3 border-r border-slate-100 print:border-slate-800 print:border-r-0">
                         <div className="font-bold text-slate-800">
                           {slot.subjectCode} {slot.subjectName}
                         </div>
                         <span className="text-[10px] font-bold text-[#0C7C82]">{slot.className}</span>
                       </td>
-                      <td className="py-3 px-2 text-center font-bold text-emerald-700 border-r border-slate-100 print:border-slate-800">
+                      <td className="py-3 px-2 text-center font-bold text-emerald-700 border-r border-slate-100 no-print">
                         {slot.isChecked ? slot.present : '-'}
                       </td>
-                      <td className="py-3 px-2 text-center font-bold text-red-600 border-r border-slate-100 print:border-slate-800">
+                      <td className="py-3 px-2 text-center font-bold text-red-600 border-r border-slate-100 no-print">
                         {slot.isChecked ? slot.absent : '-'}
                       </td>
-                      <td className="py-3 px-2 text-center font-bold text-amber-600 border-r border-slate-100 print:border-slate-800">
+                      <td className="py-3 px-2 text-center font-bold text-amber-600 border-r border-slate-100 no-print">
                         {slot.isChecked ? slot.late : '-'}
                       </td>
-                      <td className="py-3 px-2 text-center font-bold text-sky-600 border-r border-slate-100 print:border-slate-800">
+                      <td className="py-3 px-2 text-center font-bold text-sky-600 border-r border-slate-100 no-print">
                         {slot.isChecked ? slot.sick : '-'}
                       </td>
-                      <td className="py-3 px-2 text-center font-bold text-orange-600 border-r border-slate-100 print:border-slate-800">
+                      <td className="py-3 px-2 text-center font-bold text-orange-600 border-r border-slate-100 no-print">
                         {slot.isChecked ? slot.leave : '-'}
                       </td>
                       <td className="py-3 px-3 text-center no-print">

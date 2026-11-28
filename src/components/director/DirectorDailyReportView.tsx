@@ -328,7 +328,7 @@ export const DirectorDailyReportView: React.FC<DirectorDailyReportViewProps> = (
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#0C7C82] to-[#35B4B0] text-white font-semibold text-xs shadow-md shadow-[#0C7C82]/20 hover:scale-102 transition-all cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              <span>พิมพ์รายงานรายวัน (window.print())</span>
+              <span>พิมพ์รายงานรายวัน</span>
             </button>
             <button
               type="button"

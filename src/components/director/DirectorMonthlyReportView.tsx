@@ -304,7 +304,7 @@ export const DirectorMonthlyReportView: React.FC<DirectorMonthlyReportViewProps>
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#8E24AA] to-[#BA68C8] text-white font-semibold text-xs shadow-md shadow-[#8E24AA]/20 hover:scale-102 transition-all cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              <span>พิมพ์เอกสาร (window.print())</span>
+              <span>พิมพ์เอกสาร</span>
             </button>
             <button
               type="button"
