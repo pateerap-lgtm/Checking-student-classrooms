@@ -779,6 +779,126 @@ export default function App() {
     }
   };
 
+  const handleImportCurriculumsBatch = async (payload: {
+    newCurriculums?: { tempKey: string; name: string; academicYearId?: string }[];
+    newSubjects?: {
+      curriculumId?: string;
+      tempKey?: string;
+      code: string;
+      name: string;
+      periodsPerWeek: number;
+      academicYearId?: string;
+    }[];
+  }): Promise<string[]> => {
+    try {
+      const targetYearId = activeYear?.id || 'year_2569';
+      const nowIso = new Date().toISOString();
+      const ts = Date.now();
+      const keyToIdMap = new Map<string, string>();
+      const createdCurriculumIds: string[] = [];
+
+      const newCurriculums = payload.newCurriculums || [];
+      const newSubjects = payload.newSubjects || [];
+
+      const ops: Array<{ col: 'curriculums' | 'curriculumSubjects'; id: string; data: Record<string, any> }> = [];
+
+      newCurriculums.forEach((c, idx) => {
+        const id = `cur_imp_${ts}_${idx}`;
+        keyToIdMap.set(c.tempKey, id);
+        createdCurriculumIds.push(id);
+        ops.push({
+          col: 'curriculums',
+          id,
+          data: {
+            name: c.name,
+            academicYearId: c.academicYearId || targetYearId,
+            createdAt: nowIso
+          }
+        });
+      });
+
+      newSubjects.forEach((s, idx) => {
+        const resolvedCurrId = s.curriculumId || (s.tempKey ? keyToIdMap.get(s.tempKey) : undefined);
+        if (!resolvedCurrId) return;
+        const id = `cs_imp_${ts}_${idx}`;
+        ops.push({
+          col: 'curriculumSubjects',
+          id,
+          data: {
+            curriculumId: resolvedCurrId,
+            code: s.code,
+            name: s.name,
+            periodsPerWeek: Math.max(1, Number(s.periodsPerWeek) || 1),
+            academicYearId: s.academicYearId || targetYearId
+          }
+        });
+      });
+
+      for (let i = 0; i < ops.length; i += 400) {
+        const chunk = ops.slice(i, i + 400);
+        const batch = writeBatch(db);
+        chunk.forEach((op) => {
+          batch.set(doc(db, op.col, op.id), op.data);
+        });
+        await batch.commit();
+      }
+
+      return createdCurriculumIds;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'curriculums');
+      showToast('error', 'เกิดข้อผิดพลาดในการบันทึกข้อมูลหลักสูตร');
+      throw err;
+    }
+  };
+
+  const handleDeleteAllCurriculums = async () => {
+    try {
+      const targetYearId = activeYear?.id || 'year_2569';
+      const targetCurrIds = new Set(currentYearCurriculums.map((c) => c.id));
+      const relatedSubjects = curriculumSubjects.filter(
+        (cs) => targetCurrIds.has(cs.curriculumId) || currentYearCurriculumSubjects.some((ycs) => ycs.id === cs.id)
+      );
+
+      const deletes: Array<{ col: 'curriculums' | 'curriculumSubjects'; id: string }> = [
+        ...relatedSubjects.map((cs) => ({ col: 'curriculumSubjects' as const, id: cs.id })),
+        ...currentYearCurriculums.map((c) => ({ col: 'curriculums' as const, id: c.id }))
+      ];
+
+      for (let i = 0; i < deletes.length; i += 400) {
+        const chunk = deletes.slice(i, i + 400);
+        const batch = writeBatch(db);
+        chunk.forEach((item) => batch.delete(doc(db, item.col, item.id)));
+        await batch.commit();
+      }
+
+      showToast(
+        'success',
+        `ลบหลักสูตรทั้งหมด (${currentYearCurriculums.length} หลักสูตร) ในปีการศึกษา ${activeYear?.name || targetYearId} เรียบร้อยแล้ว`
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'curriculums');
+      showToast('error', 'เกิดข้อผิดพลาดในการลบหลักสูตรทั้งหมด');
+      throw err;
+    }
+  };
+
+  const handleDeleteAllSubjectsInCurriculum = async (curriculumId: string) => {
+    try {
+      const targetSubjects = curriculumSubjects.filter((s) => s.curriculumId === curriculumId);
+      for (let i = 0; i < targetSubjects.length; i += 400) {
+        const chunk = targetSubjects.slice(i, i + 400);
+        const batch = writeBatch(db);
+        chunk.forEach((s) => batch.delete(doc(db, 'curriculumSubjects', s.id)));
+        await batch.commit();
+      }
+      showToast('success', `ลบรายวิชาในหลักสูตรทั้งหมดจำนวน ${targetSubjects.length} รายวิชาเรียบร้อยแล้ว`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'curriculumSubjects');
+      showToast('error', 'เกิดข้อผิดพลาดในการลบรายวิชาในหลักสูตร');
+      throw err;
+    }
+  };
+
   const syncSubstitutionLogForAssignment = async (
     assignment: TeachingAssignment,
     prevSubstituteDate?: string
@@ -1338,13 +1458,19 @@ export default function App() {
                     <CurriculumsView
                       curriculums={currentYearCurriculums}
                       curriculumSubjects={currentYearCurriculumSubjects}
+                      allCurriculums={curriculums}
+                      allCurriculumSubjects={curriculumSubjects}
+                      academicYears={academicYears}
                       activeYear={activeYear}
                       onAddCurriculum={handleAddCurriculum}
                       onUpdateCurriculum={handleUpdateCurriculum}
                       onDeleteCurriculum={handleDeleteCurriculum}
+                      onDeleteAllCurriculums={handleDeleteAllCurriculums}
                       onAddCurriculumSubject={handleAddCurriculumSubject}
                       onUpdateCurriculumSubject={handleUpdateCurriculumSubject}
                       onDeleteCurriculumSubject={handleDeleteCurriculumSubject}
+                      onDeleteAllSubjectsInCurriculum={handleDeleteAllSubjectsInCurriculum}
+                      onImportCurriculumsBatch={handleImportCurriculumsBatch}
                       openConfirm={openConfirm}
                       showToast={showToast}
                     />
