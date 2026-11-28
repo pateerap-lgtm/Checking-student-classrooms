@@ -61,7 +61,8 @@
         "username": { "type": "string" },
         "password": { "type": "string" },
         "fullName": { "type": "string" },
-        "role": { "type": "string", "enum": ["admin", "director", "teacher"] }
+        "role": { "type": "string", "enum": ["admin", "director", "teacher"] },
+        "canManageSubstitution": { "type": "boolean" }
       },
       "required": ["username", "password", "fullName", "role"]
     },

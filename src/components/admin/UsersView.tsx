@@ -38,6 +38,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<'admin' | 'director' | 'teacher'>('teacher');
+  const [canManageSubstitution, setCanManageSubstitution] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const openAddModal = () => {
@@ -46,6 +47,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
     setPassword('pass123');
     setFullName('');
     setRole('teacher');
+    setCanManageSubstitution(false);
     setIsModalOpen(true);
   };
 
@@ -55,6 +57,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
     setPassword(u.password);
     setFullName(u.fullName);
     setRole(u.role);
+    setCanManageSubstitution(Boolean(u.canManageSubstitution));
     setIsModalOpen(true);
   };
 
@@ -64,19 +67,22 @@ export const UsersView: React.FC<UsersViewProps> = ({
 
     setIsSaving(true);
     try {
+      const substitutionEnabled = role === 'teacher' ? canManageSubstitution : false;
       if (editingUser) {
         await onUpdateUser(editingUser.id, {
           username: username.trim(),
           password: password.trim(),
           fullName: fullName.trim(),
-          role
+          role,
+          canManageSubstitution: substitutionEnabled
         });
       } else {
         await onAddUser({
           username: username.trim(),
           password: password.trim(),
           fullName: fullName.trim(),
-          role
+          role,
+          canManageSubstitution: substitutionEnabled
         });
       }
       setIsModalOpen(false);
@@ -109,7 +115,8 @@ export const UsersView: React.FC<UsersViewProps> = ({
       'username': u.username,
       'password': u.password,
       'ชื่อ-นามสกุล': u.fullName,
-      'บทบาท': u.role === 'admin' ? 'ผู้ดูแลระบบ' : u.role === 'director' ? 'ผู้อำนวยการสถานศึกษา' : 'ครู'
+      'บทบาท': u.role === 'admin' ? 'ผู้ดูแลระบบ' : u.role === 'director' ? 'ผู้อำนวยการสถานศึกษา' : 'ครู',
+      'จัดสอนแทน': u.role === 'teacher' ? (u.canManageSubstitution ? 'เปิด' : 'ปิด') : '-'
     }));
     exportToExcel(exportData, 'รายชื่อผู้ใช้งานระบบ_บุคลากร', 'ผู้ใช้งาน');
     showToast('success', 'ส่งออกข้อมูลผู้ใช้งานสำเร็จ');
@@ -137,11 +144,15 @@ export const UsersView: React.FC<UsersViewProps> = ({
         if (rawRole.includes('ดูแล') || rawRole.includes('admin')) mappedRole = 'admin';
         else if (rawRole.includes('ผู้อำนวยการ') || rawRole.includes('บริหาร') || rawRole.includes('director')) mappedRole = 'director';
 
+        const rawSub = String(row['จัดสอนแทน'] || '').trim().toLowerCase();
+        const isSubEnabled = mappedRole === 'teacher' && (rawSub === 'เปิด' || rawSub === 'true' || rawSub === '1' || rawSub === 'ใช่');
+
         return {
           username: String(row['username'] || '').trim(),
           password: String(row['password'] || 'pass123').trim(),
           fullName: String(row['ชื่อ-นามสกุล'] || row['ชื่อ'] || '').trim(),
-          role: mappedRole
+          role: mappedRole,
+          canManageSubstitution: isSubEnabled
         };
       }).filter((u) => u.username.length > 0 && u.fullName.length > 0);
 
@@ -264,19 +275,21 @@ export const UsersView: React.FC<UsersViewProps> = ({
                 <th className="py-4 px-6">Username</th>
                 <th className="py-4 px-6">Password</th>
                 <th className="py-4 px-6 text-center">บทบาท</th>
+                <th className="py-4 px-6 text-center">จัดสอนแทน</th>
                 <th className="py-4 px-6 text-right">จัดการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
+                  <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
                     ไม่พบข้อมูลผู้ใช้งานตามเงื่อนไข
                   </td>
                 </tr>
               ) : (
                 paginatedUsers.map((u, pageIdx) => {
                   const globalIdx = (currentPage - 1) * itemsPerPage + pageIdx;
+                  const subEnabled = Boolean(u.canManageSubstitution);
                   return (
                   <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="py-4 px-6 text-center text-xs text-slate-400 font-bold">
@@ -288,6 +301,46 @@ export const UsersView: React.FC<UsersViewProps> = ({
                     </td>
                     <td className="py-4 px-6 font-mono text-slate-400 text-xs">••••••••</td>
                     <td className="py-4 px-6 text-center">{getRoleBadge(u.role)}</td>
+                    <td className="py-4 px-6 text-center">
+                      {u.role === 'teacher' ? (
+                        <div className="inline-flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={subEnabled}
+                            aria-label={`สิทธิ์จัดสอนแทนของ ${u.fullName}`}
+                            onClick={() =>
+                              onUpdateUser(u.id, {
+                                canManageSubstitution: !subEnabled
+                              })
+                            }
+                            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] focus:ring-offset-1 cursor-pointer ${
+                              subEnabled ? 'bg-emerald-500' : 'bg-slate-200'
+                            }`}
+                            title={
+                              subEnabled
+                                ? 'เปิดสิทธิ์จัดสอนแทนครูคนอื่นได้ทุกคน (คลิกเพื่อปิด)'
+                                : 'ปิดสิทธิ์จัดสอนแทน (คลิกเพื่อเปิด)'
+                            }
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                subEnabled ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                          <span
+                            className={`text-xs font-bold min-w-[28px] text-left ${
+                              subEnabled ? 'text-emerald-700' : 'text-slate-400'
+                            }`}
+                          >
+                            {subEnabled ? 'เปิด' : 'ปิด'}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-300">-</span>
+                      )}
+                    </td>
                     <td className="py-4 px-6 text-right space-x-1">
                       <button
                         onClick={() => openEditModal(u)}
@@ -438,6 +491,43 @@ export const UsersView: React.FC<UsersViewProps> = ({
                   </label>
                 </div>
               </div>
+
+              {role === 'teacher' && (
+                <div className="p-3.5 rounded-2xl bg-emerald-50/60 border border-emerald-200 flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 block">
+                      สิทธิ์เมนู "จัดสอนแทน"
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      เปิดสิทธิ์ให้ครูท่านนี้สามารถจัดการสอนแทนของครูคนอื่นได้ทุกคน
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={canManageSubstitution}
+                      onClick={() => setCanManageSubstitution((prev) => !prev)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden focus:ring-2 focus:ring-[#0C7C82] cursor-pointer ${
+                        canManageSubstitution ? 'bg-emerald-500' : 'bg-slate-300'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                          canManageSubstitution ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                    <span
+                      className={`text-xs font-bold min-w-[26px] ${
+                        canManageSubstitution ? 'text-emerald-700' : 'text-slate-500'
+                      }`}
+                    >
+                      {canManageSubstitution ? 'เปิด' : 'ปิด'}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
                 <button

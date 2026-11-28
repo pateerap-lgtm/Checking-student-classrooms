@@ -45,6 +45,7 @@ export interface AppUser {
   password: string;
   fullName: string;
   role: 'admin' | 'director' | 'teacher';
+  canManageSubstitution?: boolean;
 }
 
 export interface Student {

@@ -65,6 +65,7 @@ import { CalendarView } from './components/admin/CalendarView';
 // Teacher Views
 import { TeacherDashboard } from './components/teacher/TeacherDashboard';
 import { TeacherAttendanceView } from './components/teacher/TeacherAttendanceView';
+import { TeacherSubstitutionView } from './components/teacher/TeacherSubstitutionView';
 import { TeacherReportView } from './components/teacher/TeacherReportView';
 import { TeacherProfileView } from './components/teacher/TeacherProfileView';
 
@@ -351,15 +352,20 @@ export default function App() {
     };
   }, []);
 
-  // Guard tab for director: dashboard, report, daily-report, monthly-report are accessible
+  // Guard tab for director & teacher substitution permission
   useEffect(() => {
     if (currentUser?.role === 'director') {
       const allowedDirectorTabs = ['dashboard', 'report', 'daily-report', 'monthly-report'];
       if (!allowedDirectorTabs.includes(currentTab)) {
         setCurrentTab('dashboard');
       }
+    } else if (currentUser?.role === 'teacher') {
+      const liveTeacher = users.find((u) => u.username === currentUser.username);
+      if (currentTab === 'substitution' && !liveTeacher?.canManageSubstitution) {
+        setCurrentTab('dashboard');
+      }
     }
-  }, [currentUser, currentTab]);
+  }, [currentUser, currentTab, users]);
 
   // Login handler
   const handleLoginSuccess = (userObj: { username: string; fullName: string; role: UserRole; data?: any }) => {
@@ -913,8 +919,11 @@ export default function App() {
     username: currentUser.username,
     password: 'password',
     fullName: currentUser.fullName,
-    role: 'teacher' as const
+    role: 'teacher' as const,
+    canManageSubstitution: false
   };
+  const canManageTeacherSubstitution =
+    currentUser.role === 'teacher' && Boolean(teacherUser.canManageSubstitution);
 
   // Student object if current user is student
   const studentUser = students.find((s) => s.username === currentUser.username) || {
@@ -1025,6 +1034,7 @@ export default function App() {
           userFullName={currentUser.fullName}
           settings={settings}
           activeYear={activeYear}
+          canManageSubstitution={canManageTeacherSubstitution}
           isOpenMobile={isMobileSidebarOpen}
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
           onLogoutClick={handleLogout}
@@ -1382,6 +1392,21 @@ export default function App() {
                       onDeleteAttendance={handleDeleteAttendance}
                       onUpdateAssignment={handleUpdateAssignment}
                       teachers={users.filter((u) => u.role === 'teacher')}
+                      openConfirm={openConfirm}
+                      showToast={showToast}
+                    />
+                  )}
+                  {currentTab === 'substitution' && canManageTeacherSubstitution && (
+                    <TeacherSubstitutionView
+                      currentTeacherUsername={currentUser.username}
+                      currentTeacherFullName={currentUser.fullName}
+                      assignments={currentYearAssignments}
+                      teachers={users.filter((u) => u.role === 'teacher')}
+                      periods={currentYearPeriods}
+                      classes={currentYearClasses}
+                      calendarEntries={currentYearCalendarEntries}
+                      activeYear={activeYear}
+                      onUpdateAssignment={handleUpdateAssignment}
                       openConfirm={openConfirm}
                       showToast={showToast}
                     />

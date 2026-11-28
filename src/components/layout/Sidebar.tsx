@@ -18,7 +18,8 @@ import {
   School,
   ChevronRight,
   Sparkles,
-  BookMarked
+  BookMarked,
+  ArrowRightLeft
 } from 'lucide-react';
 import { UserRole, SystemSettings, AcademicYear } from '../../types';
 
@@ -29,6 +30,7 @@ interface SidebarProps {
   userFullName: string;
   settings: SystemSettings;
   activeYear?: AcademicYear;
+  canManageSubstitution?: boolean;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   onLogoutClick: () => void;
@@ -41,6 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   userFullName,
   settings,
   activeYear,
+  canManageSubstitution = false,
   isOpenMobile,
   onCloseMobile,
   onLogoutClick
@@ -72,6 +75,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const teacherMenuItems = [
     { id: 'dashboard', label: 'แดชบอร์ดการสอน', icon: LayoutDashboard, color: 'text-[#0C7C82]' },
     { id: 'attendance', label: 'เช็คชื่อนักเรียน', icon: ClipboardCheck, color: 'text-[#35B4B0]' },
+    ...(canManageSubstitution
+      ? [{ id: 'substitution', label: 'จัดสอนแทน', icon: ArrowRightLeft, color: 'text-[#F57C00]' }]
+      : []),
     { id: 'report', label: 'รายงานการเช็คชื่อ', icon: FileText, color: 'text-[#26A69A]' },
     { id: 'profile', label: 'แก้ไขข้อมูลส่วนตัว', icon: Settings, color: 'text-[#0288D1]' },
   ];
