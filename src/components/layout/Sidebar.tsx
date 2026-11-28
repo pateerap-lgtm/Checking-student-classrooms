@@ -51,20 +51,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const adminMenuItems = [
     { id: 'dashboard', label: 'แดชบอร์ด', icon: LayoutDashboard, color: 'text-[#0C7C82]' },
-    { id: 'settings', label: 'ตั้งค่าระบบ', icon: Settings, color: 'text-[#35B4B0]' },
     { id: 'years', label: 'จัดการปีการศึกษา', icon: Calendar, color: 'text-[#26A69A]' },
-    { id: 'calendar', label: 'กำหนดปฏิทิน', icon: CalendarDays, color: 'text-[#E53935]' },
-    { id: 'periods', label: 'คาบสอน/ชั่วโมงสอน', icon: Clock, color: 'text-[#AED581]' },
-    { id: 'classes', label: 'จัดการชั้นเรียน', icon: GraduationCap, color: 'text-[#FFCA28]' },
-    { id: 'users', label: 'จัดการผู้ใช้งาน', icon: Users, color: 'text-[#FF8A65]' },
-    { id: 'students', label: 'จัดการนักเรียน', icon: UserCheck, color: 'text-[#0288D1]' },
     { id: 'curriculums', label: 'หลักสูตร', icon: BookMarked, color: 'text-[#00897B]' },
     { id: 'subjects', label: 'จัดการรายวิชา', icon: BookOpen, color: 'text-[#4A2C6D]' },
+    { id: 'periods', label: 'คาบสอน/ชั่วโมงสอน', icon: Clock, color: 'text-[#AED581]' },
+    { id: 'users', label: 'จัดการผู้ใช้งาน', icon: Users, color: 'text-[#FF8A65]' },
+    { id: 'classes', label: 'จัดการชั้นเรียน', icon: GraduationCap, color: 'text-[#FFCA28]' },
+    { id: 'students', label: 'จัดการนักเรียน', icon: UserCheck, color: 'text-[#0288D1]' },
+    { id: 'calendar', label: 'กำหนดปฏิทิน', icon: CalendarDays, color: 'text-[#E53935]' },
     { id: 'assignments', label: 'มอบหมายชั้นเรียนที่สอน', icon: CalendarCheck, color: 'text-[#F57C00]' },
-    { id: 'substitution-report', label: 'รายงานการสอนแทน', icon: FileSpreadsheet, color: 'text-[#E65100]' },
     { id: 'report', label: 'รายงานการเช็คชื่อ', icon: FileText, color: 'text-[#26A69A]' },
     { id: 'daily-report', label: 'รายงานรายวัน', icon: CalendarDays, color: 'text-[#0288D1]' },
     { id: 'monthly-report', label: 'รายงานรายเดือน', icon: CalendarRange, color: 'text-[#8E24AA]' },
+    { id: 'substitution-report', label: 'รายงานการสอนแทน', icon: FileSpreadsheet, color: 'text-[#E65100]' },
+    { id: 'settings', label: 'ตั้งค่า', icon: Settings, color: 'text-[#35B4B0]' },
   ];
 
   const directorMenuItems = [
