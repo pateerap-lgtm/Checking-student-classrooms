@@ -39,6 +39,7 @@ import {
   TeachingAssignment,
   AttendanceLog,
   SchoolCalendarEntry,
+  SubstitutionLog,
   UserRole
 } from './types';
 import { LoginPage } from './components/auth/LoginPage';
@@ -68,6 +69,7 @@ import { TeacherAttendanceView } from './components/teacher/TeacherAttendanceVie
 import { TeacherSubstitutionView } from './components/teacher/TeacherSubstitutionView';
 import { TeacherReportView } from './components/teacher/TeacherReportView';
 import { TeacherProfileView } from './components/teacher/TeacherProfileView';
+import { SubstitutionMonthlyReportView } from './components/common/SubstitutionMonthlyReportView';
 
 // Director Views
 import { DirectorDailyReportView } from './components/director/DirectorDailyReportView';
@@ -112,6 +114,7 @@ export default function App() {
   const [assignments, setAssignments] = useState<TeachingAssignment[]>(DEFAULT_ASSIGNMENTS);
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
   const [calendarEntries, setCalendarEntries] = useState<SchoolCalendarEntry[]>([]);
+  const [substitutionLogs, setSubstitutionLogs] = useState<SubstitutionLog[]>([]);
 
   // Teacher navigation state
   const [pendingAttendanceAssignment, setPendingAttendanceAssignment] = useState<TeachingAssignment | null>(null);
@@ -235,6 +238,12 @@ export default function App() {
     );
   }, [calendarEntries, activeYearId, activeYear]);
 
+  const currentYearSubstitutionLogs = useMemo(() => {
+    return substitutionLogs.filter(
+      (s) => s.academicYearId === activeYearId || (!s.academicYearId && (activeYear?.isCurrent || activeYearId === 'year_2569'))
+    );
+  }, [substitutionLogs, activeYearId, activeYear]);
+
   // Initialize and attach Firestore real-time listeners
   useEffect(() => {
     testConnection();
@@ -336,6 +345,14 @@ export default function App() {
       setCalendarEntries(list);
     }, (err) => handleFirestoreError(err, OperationType.GET, 'schoolCalendar'));
 
+    // Listen to Substitution Logs
+    const unsubSubstitutionLogs = onSnapshot(collection(db, 'substitutionLogs'), (snap) => {
+      const list: SubstitutionLog[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() } as SubstitutionLog));
+      list.sort((a, b) => b.date.localeCompare(a.date));
+      setSubstitutionLogs(list);
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'substitutionLogs'));
+
     return () => {
       unsubSettings();
       unsubYears();
@@ -349,6 +366,7 @@ export default function App() {
       unsubAssignments();
       unsubAttendance();
       unsubCalendar();
+      unsubSubstitutionLogs();
     };
   }, []);
 
@@ -759,18 +777,89 @@ export default function App() {
     }
   };
 
+  const syncSubstitutionLogForAssignment = async (
+    assignment: TeachingAssignment,
+    prevSubstituteDate?: string
+  ) => {
+    const subUsername = assignment.substituteTeacherUsername?.trim();
+    const subDate = assignment.substituteDate?.trim();
+
+    // If cancelled or date changed, remove old un-checked/matching entry
+    if (prevSubstituteDate && (!subUsername || prevSubstituteDate !== subDate)) {
+      const oldLogId = `sub_${assignment.id}_${prevSubstituteDate}`;
+      try {
+        await deleteDoc(doc(db, 'substitutionLogs', oldLogId));
+      } catch {
+        // Ignore if not present
+      }
+    }
+
+    if (subUsername && subDate) {
+      const logId = `sub_${assignment.id}_${subDate}`;
+      const subUser = users.find((u) => u.username === subUsername);
+      const primaryUser = users.find((u) => u.username === assignment.teacherUsername);
+      const payload: Record<string, any> = {
+        assignmentId: assignment.id,
+        academicYearId: assignment.academicYearId || activeYearId || 'year_2569',
+        date: subDate,
+        dayOfWeek: assignment.dayOfWeek,
+        periodId: assignment.periodId,
+        periodName: assignment.periodName,
+        classId: assignment.classId,
+        className: assignment.className,
+        subjectId: assignment.subjectId,
+        subjectCode: assignment.subjectCode,
+        subjectName: assignment.subjectName,
+        teacherUsername: assignment.teacherUsername,
+        teacherName: primaryUser?.fullName || assignment.teacherName || assignment.teacherUsername,
+        substituteTeacherUsername: subUsername,
+        substituteTeacherName: subUser?.fullName || subUsername,
+        updatedAt: new Date().toISOString()
+      };
+      if (assignment.endPeriodId) {
+        payload.endPeriodId = assignment.endPeriodId;
+      }
+      if (currentUser?.username) {
+        payload.assignedByUsername = currentUser.username;
+      }
+      if (currentUser?.fullName) {
+        payload.assignedByName = currentUser.fullName;
+      }
+      await setDoc(doc(db, 'substitutionLogs', logId), payload);
+    }
+  };
+
   // Assignments mutations
   const handleAddAssignment = async (newAssignment: Omit<TeachingAssignment, 'id'>) => {
     const id = `a_${Date.now()}`;
+    const yearId = newAssignment.academicYearId || activeYear?.id || 'year_2569';
     await setDoc(doc(db, 'assignments', id), {
       ...newAssignment,
-      academicYearId: newAssignment.academicYearId || activeYear?.id || 'year_2569'
+      academicYearId: yearId
     });
+    if (newAssignment.substituteTeacherUsername && newAssignment.substituteDate) {
+      await syncSubstitutionLogForAssignment({
+        ...newAssignment,
+        id,
+        academicYearId: yearId
+      });
+    }
     showToast('success', 'มอบหมายการสอนสำเร็จ');
   };
 
   const handleUpdateAssignment = async (id: string, updated: Partial<TeachingAssignment>) => {
+    const existing = assignments.find((a) => a.id === id);
     await updateDoc(doc(db, 'assignments', id), updated);
+    if (
+      existing &&
+      (updated.substituteTeacherUsername !== undefined || updated.substituteDate !== undefined)
+    ) {
+      const merged: TeachingAssignment = {
+        ...existing,
+        ...updated
+      };
+      await syncSubstitutionLogForAssignment(merged, existing.substituteDate);
+    }
     showToast('success', 'อัพเดทการมอบหมายสอนสำเร็จ');
   };
 
@@ -1285,6 +1374,21 @@ export default function App() {
                       showToast={showToast}
                     />
                   )}
+                  {currentTab === 'substitution-report' && (
+                    <SubstitutionMonthlyReportView
+                      substitutionLogs={currentYearSubstitutionLogs}
+                      assignments={currentYearAssignments}
+                      attendanceLogs={currentYearAttendanceLogs}
+                      teachers={users.filter((u) => u.role === 'teacher')}
+                      allUsers={users}
+                      periods={currentYearPeriods}
+                      calendarEntries={currentYearCalendarEntries}
+                      settings={settings}
+                      activeYear={activeYear}
+                      currentUserRole="admin"
+                      currentUserFullName={currentUser.fullName}
+                    />
+                  )}
                   {currentTab === 'report' && (
                     <TeacherReportView
                       attendanceLogs={currentYearAttendanceLogs}
@@ -1409,6 +1513,22 @@ export default function App() {
                       onUpdateAssignment={handleUpdateAssignment}
                       openConfirm={openConfirm}
                       showToast={showToast}
+                    />
+                  )}
+                  {currentTab === 'substitution-report' && (
+                    <SubstitutionMonthlyReportView
+                      substitutionLogs={currentYearSubstitutionLogs}
+                      assignments={currentYearAssignments}
+                      attendanceLogs={currentYearAttendanceLogs}
+                      teachers={users.filter((u) => u.role === 'teacher')}
+                      allUsers={users}
+                      periods={currentYearPeriods}
+                      calendarEntries={currentYearCalendarEntries}
+                      settings={settings}
+                      activeYear={activeYear}
+                      currentUserRole="teacher"
+                      currentUserUsername={currentUser.username}
+                      currentUserFullName={currentUser.fullName}
                     />
                   )}
                   {currentTab === 'report' && (

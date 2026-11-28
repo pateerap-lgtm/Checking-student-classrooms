@@ -172,6 +172,33 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["date", "type", "title"]
+    },
+    "SubstitutionLog": {
+      "title": "SubstitutionLog",
+      "description": "Historical and scheduled substitute teaching assignments for monthly reporting",
+      "type": "object",
+      "properties": {
+        "assignmentId": { "type": "string" },
+        "academicYearId": { "type": "string" },
+        "date": { "type": "string" },
+        "dayOfWeek": { "type": "string" },
+        "periodId": { "type": "string" },
+        "endPeriodId": { "type": "string" },
+        "periodName": { "type": "string" },
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "subjectCode": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "teacherUsername": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "substituteTeacherUsername": { "type": "string" },
+        "substituteTeacherName": { "type": "string" },
+        "assignedByUsername": { "type": "string" },
+        "assignedByName": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["assignmentId", "academicYearId", "date", "teacherUsername", "substituteTeacherUsername"]
     }
   },
   "firestore": {
@@ -222,6 +249,10 @@
     "/schoolCalendar/{entryId}": {
       "schema": "SchoolCalendarEntry",
       "description": "School calendar holiday and opened normal day overrides"
+    },
+    "/substitutionLogs/{logId}": {
+      "schema": "SubstitutionLog",
+      "description": "Substitute teaching records for monthly reporting"
     }
   }
 }

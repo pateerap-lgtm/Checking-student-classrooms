@@ -158,3 +158,26 @@ export interface SchoolCalendarEntry {
   academicYearId?: string;
   updatedAt?: string;
 }
+
+export interface SubstitutionLog {
+  id: string;
+  assignmentId: string;
+  academicYearId: string;
+  date: string; // YYYY-MM-DD
+  dayOfWeek: DayOfWeek;
+  periodId: string;
+  endPeriodId?: string;
+  periodName: string;
+  classId: string;
+  className: string;
+  subjectId: string;
+  subjectCode: string;
+  subjectName: string;
+  teacherUsername: string;
+  teacherName: string;
+  substituteTeacherUsername: string;
+  substituteTeacherName: string;
+  assignedByUsername?: string;
+  assignedByName?: string;
+  updatedAt: string;
+}

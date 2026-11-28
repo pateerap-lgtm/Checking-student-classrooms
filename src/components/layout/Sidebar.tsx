@@ -19,7 +19,8 @@ import {
   ChevronRight,
   Sparkles,
   BookMarked,
-  ArrowRightLeft
+  ArrowRightLeft,
+  FileSpreadsheet
 } from 'lucide-react';
 import { UserRole, SystemSettings, AcademicYear } from '../../types';
 
@@ -60,6 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'curriculums', label: 'หลักสูตร', icon: BookMarked, color: 'text-[#00897B]' },
     { id: 'subjects', label: 'จัดการรายวิชา', icon: BookOpen, color: 'text-[#4A2C6D]' },
     { id: 'assignments', label: 'มอบหมายชั้นเรียนที่สอน', icon: CalendarCheck, color: 'text-[#F57C00]' },
+    { id: 'substitution-report', label: 'รายงานการสอนแทน', icon: FileSpreadsheet, color: 'text-[#E65100]' },
     { id: 'report', label: 'รายงานการเช็คชื่อ', icon: FileText, color: 'text-[#26A69A]' },
     { id: 'daily-report', label: 'รายงานรายวัน', icon: CalendarDays, color: 'text-[#0288D1]' },
     { id: 'monthly-report', label: 'รายงานรายเดือน', icon: CalendarRange, color: 'text-[#8E24AA]' },
@@ -78,6 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     ...(canManageSubstitution
       ? [{ id: 'substitution', label: 'จัดสอนแทน', icon: ArrowRightLeft, color: 'text-[#F57C00]' }]
       : []),
+    { id: 'substitution-report', label: 'รายงานการสอนแทน', icon: FileSpreadsheet, color: 'text-[#E65100]' },
     { id: 'report', label: 'รายงานการเช็คชื่อ', icon: FileText, color: 'text-[#26A69A]' },
     { id: 'profile', label: 'แก้ไขข้อมูลส่วนตัว', icon: Settings, color: 'text-[#0288D1]' },
   ];
