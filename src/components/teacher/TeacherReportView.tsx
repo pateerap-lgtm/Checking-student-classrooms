@@ -974,9 +974,9 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
         </div>
 
         {/* 3-Signatory Block: Teacher, School Director, Parent */}
-        <div className="grid grid-cols-3 gap-4 pt-6 text-center text-xs text-slate-800 print:pt-4 print:break-inside-avoid">
-          <div className="space-y-4">
-            <p className="leading-relaxed">
+        <div className="grid grid-cols-3 gap-4 pt-6 text-center text-xs leading-snug text-slate-800 print:pt-4 print:break-inside-avoid">
+          <div className="space-y-0">
+            <p>
               ลงชื่อ........................................................
             </p>
             <p className="font-semibold">({effectiveTeacherFullName})</p>
@@ -986,8 +986,8 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
             </p>
           </div>
 
-          <div className="space-y-4">
-            <p className="leading-relaxed">
+          <div className="space-y-0">
+            <p>
               ลงชื่อ........................................................
             </p>
             <p className="font-semibold">({effectiveDirectorName})</p>
@@ -997,8 +997,8 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
             </p>
           </div>
 
-          <div className="space-y-4">
-            <p className="leading-relaxed">
+          <div className="space-y-0">
+            <p>
               ลงชื่อ........................................................
             </p>
             <p className="font-semibold">(........................................................)</p>
@@ -1979,23 +1979,23 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
             </table>
 
             {/* Official 3-Signatory Block */}
-            <div className="grid grid-cols-3 gap-4 pt-8 text-center text-xs print:break-inside-avoid">
-              <div className="space-y-4">
-                <p className="leading-relaxed">ลงชื่อ........................................................</p>
+            <div className="grid grid-cols-3 gap-4 pt-8 text-center text-xs leading-snug print:break-inside-avoid">
+              <div className="space-y-0">
+                <p>ลงชื่อ........................................................</p>
                 <p className="font-semibold">({teacherFullName})</p>
                 <p className="text-[11px] text-slate-600">ครูเวรประจำวัน / ผู้รายงาน</p>
                 <p className="text-[11px] text-slate-500">วันที่........./........./..........</p>
               </div>
 
-              <div className="space-y-4">
-                <p className="leading-relaxed">ลงชื่อ........................................................</p>
+              <div className="space-y-0">
+                <p>ลงชื่อ........................................................</p>
                 <p className="font-semibold">(........................................................)</p>
                 <p className="text-[11px] text-slate-600">หัวหน้าฝ่ายวิชาการ</p>
                 <p className="text-[11px] text-slate-500">วันที่........./........./..........</p>
               </div>
 
-              <div className="space-y-4">
-                <p className="leading-relaxed">ลงชื่อ........................................................</p>
+              <div className="space-y-0">
+                <p>ลงชื่อ........................................................</p>
                 <p className="font-semibold">({effectiveDirectorName})</p>
                 <p className="text-[11px] text-slate-600 font-medium">ผู้อำนวยการสถานศึกษา</p>
                 <p className="text-[11px] text-slate-500">วันที่........./........./..........</p>
@@ -2287,9 +2287,9 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
           </div>
 
           {/* Official Signature Block */}
-          <div className="grid grid-cols-2 gap-8 pt-8 text-center text-xs text-slate-800 print:pt-6 print:gap-4 print:break-inside-avoid">
-            <div className="space-y-6">
-              <p className="leading-relaxed">
+          <div className="grid grid-cols-2 gap-8 pt-8 text-center text-xs leading-snug text-slate-800 print:pt-6 print:gap-4 print:break-inside-avoid">
+            <div className="space-y-0">
+              <p>
                 ลงชื่อ..................................................................ครูผู้สอน
               </p>
               <p className="font-semibold">({effectiveTeacherFullName})</p>
@@ -2298,8 +2298,8 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
               </p>
             </div>
 
-            <div className="space-y-6">
-              <p className="leading-relaxed">
+            <div className="space-y-0">
+              <p>
                 ลงชื่อ..................................................................ผู้อำนวยการสถานศึกษา
               </p>
               <p className="font-semibold">({effectiveDirectorName})</p>

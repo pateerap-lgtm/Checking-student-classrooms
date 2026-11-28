@@ -1397,19 +1397,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* Print Only Signature Block */}
           <div className="hidden print:block pt-3 px-2 pb-0 text-center text-[9.5px] leading-tight text-black print:break-inside-avoid">
             <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-1.5">
+              <div className="space-y-0">
                 <p>ลงชื่อ........................................................</p>
                 <p className="font-semibold">(........................................................)</p>
                 <p>ผู้รายงาน / ผู้ดูแลระบบ</p>
                 <p className="text-[9px]">วันที่ ...... เดือน ..................... พ.ศ. ...........</p>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-0">
                 <p>ลงชื่อ........................................................</p>
                 <p className="font-semibold">(........................................................)</p>
                 <p>หัวหน้าฝ่ายวิชาการ</p>
                 <p className="text-[9px]">วันที่ ...... เดือน ..................... พ.ศ. ...........</p>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-0">
                 <p>ลงชื่อ........................................................</p>
                 <p className="font-semibold">({effectiveDirectorName})</p>
                 <p className="font-bold">ผู้อำนวยการสถานศึกษา</p>

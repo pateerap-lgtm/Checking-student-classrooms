@@ -688,11 +688,11 @@ export const DirectorMonthlyReportView: React.FC<DirectorMonthlyReportViewProps>
         {/* =========================================================================
             PRINT ONLY: Signatures Section (Displayed at bottom of printed document)
         ========================================================================= */}
-        <div className="hidden print:block pt-8 px-4 text-center text-xs text-slate-800 print:break-inside-avoid">
+        <div className="hidden print:block pt-8 px-4 text-center text-xs leading-snug text-slate-800 print:break-inside-avoid">
           <div className="grid grid-cols-3 gap-6">
             {/* Signature 1: Homeroom Teacher */}
-            <div className="space-y-4">
-              <p className="leading-relaxed">ลงชื่อ........................................................</p>
+            <div className="space-y-0">
+              <p>ลงชื่อ........................................................</p>
               <p className="font-semibold">(........................................................)</p>
               <p className="text-[11px] text-slate-600">ครูที่ปรึกษา / ครูประจำชั้น</p>
               <p className="text-[10px] text-slate-500">
@@ -701,8 +701,8 @@ export const DirectorMonthlyReportView: React.FC<DirectorMonthlyReportViewProps>
             </div>
 
             {/* Signature 2: Academic Head */}
-            <div className="space-y-4">
-              <p className="leading-relaxed">ลงชื่อ........................................................</p>
+            <div className="space-y-0">
+              <p>ลงชื่อ........................................................</p>
               <p className="font-semibold">(........................................................)</p>
               <p className="text-[11px] text-slate-600">หัวหน้าฝ่ายวิชาการ</p>
               <p className="text-[10px] text-slate-500">
@@ -711,8 +711,8 @@ export const DirectorMonthlyReportView: React.FC<DirectorMonthlyReportViewProps>
             </div>
 
             {/* Signature 3: School Director */}
-            <div className="space-y-4">
-              <p className="leading-relaxed">ลงชื่อ........................................................</p>
+            <div className="space-y-0">
+              <p>ลงชื่อ........................................................</p>
               <p className="font-semibold">({effectiveDirectorName})</p>
               <p className="text-[11px] text-slate-800 font-bold">ผู้อำนวยการสถานศึกษา</p>
               <p className="text-[10px] text-slate-500">

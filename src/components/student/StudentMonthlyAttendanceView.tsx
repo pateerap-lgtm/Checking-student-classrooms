@@ -453,18 +453,18 @@ export const StudentMonthlyAttendanceView: React.FC<StudentMonthlyAttendanceView
         )}
 
         {/* Printable Signature Section (Visible on Print Only) */}
-        <div className="hidden print:grid grid-cols-3 gap-6 pt-12 text-center text-xs text-slate-800">
-          <div className="space-y-6">
+        <div className="hidden print:grid grid-cols-3 gap-6 pt-12 text-center text-xs leading-snug text-slate-800 print:break-inside-avoid">
+          <div className="space-y-0">
             <p>ลงชื่อ .....................................................</p>
             <p>({currentStudent.name})</p>
             <p className="font-bold">นักเรียน</p>
           </div>
-          <div className="space-y-6">
+          <div className="space-y-0">
             <p>ลงชื่อ .....................................................</p>
             <p>({advisorTeacher.fullName})</p>
             <p className="font-bold">ครูประจำชั้น / ครูที่ปรึกษา</p>
           </div>
-          <div className="space-y-6">
+          <div className="space-y-0">
             <p>ลงชื่อ .....................................................</p>
             <p>({settings.directorName || 'นายภัทรธีระ ประทุมเม'})</p>
             <p className="font-bold">ผู้อำนวยการสถานศึกษา</p>
