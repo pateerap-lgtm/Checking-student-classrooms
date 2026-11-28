@@ -2017,7 +2017,7 @@ export const TeacherReportView: React.FC<TeacherReportViewProps> = ({
               {settings.affiliationName || 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษาอุดรธานี เขต 3'}
             </p>
             <h3 className="text-sm font-bold text-[#0C7C82] print:text-black pt-1">
-              รายงานสรุปการเช็คชื่อการเข้าเรียนของนักเรียนสำหรับรายวิชา (แบบ ปพ.5)
+              รายงานสรุปการเช็คชื่อการเข้าเรียนของนักเรียนสำหรับรายวิชา
             </h3>
 
             <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-xs text-slate-800 pt-1 font-medium">
