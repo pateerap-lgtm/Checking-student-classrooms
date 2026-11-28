@@ -529,9 +529,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const classLabel =
       selectedReportClassId === 'ALL' ? 'ทุกชั้นเรียน' : selectedClassObj?.name || 'ชั้นเรียน';
     const exportRows = classAbsenceReport.rows.map((r, idx) => ({
-      'ลำดับ': idx + 1,
       'เลขที่': r.student.seq || idx + 1,
-      'รหัสนักเรียน': r.student.username || '-',
       'ชื่อ - นามสกุล': r.student.name,
       'ชั้นเรียน': r.className,
       'วันเรียนที่เช็ค (วัน)': r.evaluatedDays,
@@ -805,7 +803,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, [subjects, classes, students]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 print:space-y-0">
       {/* Mobile-only iPhone-like Quick App Shortcut Icons Grid */}
       <div className="block lg:hidden bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-3xl p-5 shadow-xl no-print">
         <div className="flex items-center justify-between mb-4">
@@ -1042,36 +1040,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* Admin Monthly Classroom Absence Report Section */}
-      {currentUserRole === 'admin' && (
-        <div className="bg-white rounded-3xl p-6 lg:p-7 border border-slate-100 shadow-xs space-y-5 print:border-none print:shadow-none print:rounded-none print:p-0">
+      {currentUserRole === 'admin' && (() => {
+        const printRowCount = classAbsenceReport.rows.length;
+        const printTableDensityClass =
+          printRowCount > 48
+            ? 'print:text-[8px] print:leading-[1.15]'
+            : printRowCount > 34
+            ? 'print:text-[9px] print:leading-[1.2]'
+            : 'print:text-[10px] print:leading-[1.25]';
+        const printHeadPadClass =
+          printRowCount > 48
+            ? 'print:py-[2px] print:px-1'
+            : printRowCount > 34
+            ? 'print:py-[2.5px] print:px-1.5'
+            : 'print:py-1 print:px-1.5';
+        const printCellPadClass =
+          printRowCount > 48
+            ? 'print:py-[1px] print:px-1'
+            : printRowCount > 34
+            ? 'print:py-[1.5px] print:px-1.5'
+            : 'print:py-[2.5px] print:px-1.5';
+
+        return (
+        <div className="print-bw-single-page bg-white rounded-3xl p-6 lg:p-7 border border-slate-100 shadow-xs space-y-5 print:border-none print:shadow-none print:rounded-none print:p-0 print:m-0 print:space-y-0">
           {/* Official Print Header */}
-          <div className="hidden print:block p-4 border-b-2 border-slate-800 text-center space-y-2 mb-4">
-            <div className="flex items-center justify-center gap-3">
+          <div className="hidden print:block pb-1.5 mb-2 border-b border-black text-center space-y-0.5 print:break-inside-avoid">
+            <div className="flex items-center justify-center gap-2.5">
               {settings?.logoUrl ? (
-                <img src={settings.logoUrl} alt="Logo" className="w-14 h-14 object-contain" />
+                <img src={settings.logoUrl} alt="Logo" className="w-9 h-9 object-contain" />
               ) : (
-                <School className="w-12 h-12 text-slate-800" />
+                <School className="w-8 h-8 text-black" />
               )}
               <div className="text-left">
-                <h1 className="text-lg font-bold text-slate-900 leading-tight">
+                <h1 className="text-[13px] font-bold text-black leading-tight">
                   {settings?.schoolName || 'โรงเรียน'}
                 </h1>
-                <p className="text-xs text-slate-700">
+                <p className="text-[10px] text-black leading-tight">
                   {settings?.affiliationName || 'สำนักงานเขตพื้นที่การศึกษา'}
                 </p>
               </div>
             </div>
-            <div className="pt-1">
-              <h2 className="text-base font-bold text-slate-900">
+            <div className="pt-0.5">
+              <h2 className="text-[12px] font-bold text-black leading-tight">
                 รายงานสรุปจำนวนวันมาเรียน - ขาดเรียนรายชั้นเรียน ประจำเดือน
               </h2>
-              <p className="text-xs text-slate-800 mt-0.5">
+              <p className="text-[10px] text-black leading-tight mt-0.5">
                 ชั้นเรียน: <strong>{selectedReportClassLabel}</strong> | ประจำเดือน:{' '}
                 <strong>{selectedReportMonthOption?.label}</strong> | ปีการศึกษา:{' '}
-                <strong>{currentSelectedYear?.name || activeYear?.name || '2569'}</strong>
-              </p>
-              <p className="text-[11px] text-slate-700 mt-0.5">
-                จำนวนนักเรียน: {classAbsenceKPI.totalStudents} คน | วันเปิดเรียนที่เช็คชื่อ:{' '}
+                <strong>{currentSelectedYear?.name || activeYear?.name || '2569'}</strong> | จำนวนนักเรียน:{' '}
+                {classAbsenceKPI.totalStudents} คน | วันเปิดเรียนที่เช็คชื่อ:{' '}
                 {classAbsenceReport.checkedDaysCount} วัน | อัตรามาเรียนเฉลี่ย: {classAbsenceKPI.avgRate}%
               </p>
             </div>
@@ -1246,50 +1263,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           {/* Student Absence Summary Table */}
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 print:border-slate-800 print:rounded-none">
-            <table className="w-full text-left text-xs border-collapse">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 print:overflow-visible print:border-none print:rounded-none">
+            <table className={`w-full text-left text-xs border-collapse ${printTableDensityClass}`}>
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold text-[11px] print:bg-slate-100 print:text-black print:border-slate-800">
-                  <th className="py-3 px-2.5 text-center w-11 border-r border-slate-200 print:border-slate-800">ลำดับ</th>
-                  <th className="py-3 px-2.5 text-center w-12 border-r border-slate-200 print:border-slate-800">เลขที่</th>
-                  <th className="py-3 px-2.5 border-r border-slate-200 print:border-slate-800 w-24">รหัสนักเรียน</th>
-                  <th className="py-3 px-3 border-r border-slate-200 print:border-slate-800 min-w-[160px]">ชื่อ - นามสกุล</th>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold text-[11px] print:bg-white print:text-black print:text-[inherit]">
+                  <th className={`py-3 px-2.5 text-center w-14 border-r border-slate-200 ${printHeadPadClass} print:w-10`}>
+                    เลขที่
+                  </th>
+                  <th className={`py-3 px-3 border-r border-slate-200 min-w-[180px] ${printHeadPadClass} print:min-w-0`}>
+                    ชื่อ - นามสกุล
+                  </th>
                   {selectedReportClassId === 'ALL' && (
-                    <th className="py-3 px-2.5 border-r border-slate-200 print:border-slate-800 w-24">ชั้นเรียน</th>
+                    <th className={`py-3 px-2.5 border-r border-slate-200 w-24 ${printHeadPadClass} print:w-16`}>
+                      ชั้นเรียน
+                    </th>
                   )}
-                  <th className="py-3 px-2 text-center w-20 border-r border-slate-200 print:border-slate-800">
+                  <th className={`py-3 px-2 text-center w-24 border-r border-slate-200 ${printHeadPadClass} print:w-16`}>
                     วันเรียน (วัน)
                   </th>
-                  <th className="py-3 px-2 text-center w-14 text-emerald-700 border-r border-slate-200 print:border-slate-800">
+                  <th className={`py-3 px-2 text-center w-14 text-emerald-700 border-r border-slate-200 ${printHeadPadClass} print:w-10`}>
                     มา
                   </th>
-                  <th className="py-3 px-2 text-center w-14 text-rose-600 border-r border-slate-200 print:border-slate-800">
+                  <th className={`py-3 px-2 text-center w-14 text-rose-600 border-r border-slate-200 ${printHeadPadClass} print:w-10`}>
                     ขาด
                   </th>
-                  <th className="py-3 px-2 text-center w-14 text-amber-600 border-r border-slate-200 print:border-slate-800">
+                  <th className={`py-3 px-2 text-center w-14 text-amber-600 border-r border-slate-200 ${printHeadPadClass} print:w-10`}>
                     สาย
                   </th>
-                  <th className="py-3 px-2 text-center w-14 text-sky-600 border-r border-slate-200 print:border-slate-800">
+                  <th className={`py-3 px-2 text-center w-14 text-sky-600 border-r border-slate-200 ${printHeadPadClass} print:w-10`}>
                     ป่วย
                   </th>
-                  <th className="py-3 px-2 text-center w-14 text-orange-600 border-r border-slate-200 print:border-slate-800">
+                  <th className={`py-3 px-2 text-center w-14 text-orange-600 border-r border-slate-200 ${printHeadPadClass} print:w-10`}>
                     กิจ
                   </th>
-                  <th className="py-3 px-2.5 text-center w-24 border-r border-slate-200 print:border-slate-800 print:border-r-0">
+                  <th className={`py-3 px-2.5 text-center w-24 border-r border-slate-200 ${printHeadPadClass} print:w-16`}>
                     ร้อยละมาเรียน
                   </th>
                   <th className="py-3 px-2.5 text-center w-24 no-print">รายละเอียด</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 print:divide-slate-800">
+              <tbody className="divide-y divide-slate-100">
                 {classAbsenceReport.rows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={selectedReportClassId === 'ALL' ? 13 : 12}
+                      colSpan={selectedReportClassId === 'ALL' ? 11 : 10}
                       className="py-10 text-center text-slate-400"
                     >
-                      <AlertCircle className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                      <p className="font-semibold text-slate-600 text-sm">
+                      <AlertCircle className="w-8 h-8 mx-auto text-slate-300 mb-2 no-print" />
+                      <p className="font-semibold text-slate-600 text-sm print:text-xs">
                         ไม่พบข้อมูลนักเรียนในชั้นเรียนหรือเดือนที่เลือก
                       </p>
                     </td>
@@ -1301,51 +1322,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       className={
                         row.absentDays > 0
                           ? 'bg-rose-50/20 hover:bg-rose-50/40 print:bg-white'
-                          : 'bg-white hover:bg-slate-50/70'
+                          : 'bg-white hover:bg-slate-50/70 print:bg-white'
                       }
                     >
-                      <td className="py-2.5 px-2.5 text-center font-bold text-slate-500 border-r border-slate-100 print:border-slate-800">
-                        {idx + 1}
-                      </td>
-                      <td className="py-2.5 px-2.5 text-center font-semibold text-slate-600 border-r border-slate-100 print:border-slate-800">
+                      <td className={`py-2.5 px-2.5 text-center font-semibold text-slate-600 border-r border-slate-100 ${printCellPadClass} print:font-normal`}>
                         {row.student.seq || idx + 1}
                       </td>
-                      <td className="py-2.5 px-2.5 font-mono text-slate-600 border-r border-slate-100 print:border-slate-800">
-                        {row.student.username || '-'}
-                      </td>
-                      <td className="py-2.5 px-3 font-bold text-slate-800 border-r border-slate-100 print:border-slate-800">
+                      <td className={`py-2.5 px-3 font-bold text-slate-800 border-r border-slate-100 ${printCellPadClass} print:font-normal print:whitespace-nowrap`}>
                         {row.student.name}
                       </td>
                       {selectedReportClassId === 'ALL' && (
-                        <td className="py-2.5 px-2.5 font-semibold text-[#0C7C82] border-r border-slate-100 print:border-slate-800 print:text-black">
+                        <td className={`py-2.5 px-2.5 font-semibold text-[#0C7C82] border-r border-slate-100 ${printCellPadClass} print:font-normal print:whitespace-nowrap`}>
                           {row.className}
                         </td>
                       )}
-                      <td className="py-2.5 px-2 text-center font-bold text-slate-700 border-r border-slate-100 print:border-slate-800">
+                      <td className={`py-2.5 px-2 text-center font-bold text-slate-700 border-r border-slate-100 ${printCellPadClass} print:font-normal`}>
                         {row.evaluatedDays}
                       </td>
-                      <td className="py-2.5 px-2 text-center font-bold text-emerald-700 border-r border-slate-100 print:border-slate-800">
+                      <td className={`py-2.5 px-2 text-center font-bold text-emerald-700 border-r border-slate-100 ${printCellPadClass} print:font-normal`}>
                         {row.presentDays}
                       </td>
-                      <td className="py-2.5 px-2 text-center font-bold border-r border-slate-100 print:border-slate-800">
+                      <td className={`py-2.5 px-2 text-center font-bold border-r border-slate-100 ${printCellPadClass} print:font-normal`}>
                         {row.absentDays > 0 ? (
-                          <span className="inline-flex items-center justify-center min-w-[1.75rem] px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700 font-extrabold print:bg-transparent print:text-black">
+                          <span className="inline-flex items-center justify-center min-w-[1.75rem] px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700 font-extrabold print:min-w-0 print:p-0 print:rounded-none print:bg-transparent print:font-semibold">
                             {row.absentDays}
                           </span>
                         ) : (
-                          <span className="text-slate-400 print:text-black">0</span>
+                          <span className="text-slate-400">0</span>
                         )}
                       </td>
-                      <td className="py-2.5 px-2 text-center font-bold text-amber-600 border-r border-slate-100 print:border-slate-800 print:text-black">
+                      <td className={`py-2.5 px-2 text-center font-bold text-amber-600 border-r border-slate-100 ${printCellPadClass} print:font-normal`}>
                         {row.lateDays}
                       </td>
-                      <td className="py-2.5 px-2 text-center font-bold text-sky-600 border-r border-slate-100 print:border-slate-800 print:text-black">
+                      <td className={`py-2.5 px-2 text-center font-bold text-sky-600 border-r border-slate-100 ${printCellPadClass} print:font-normal`}>
                         {row.sickDays}
                       </td>
-                      <td className="py-2.5 px-2 text-center font-bold text-orange-600 border-r border-slate-100 print:border-slate-800 print:text-black">
+                      <td className={`py-2.5 px-2 text-center font-bold text-orange-600 border-r border-slate-100 ${printCellPadClass} print:font-normal`}>
                         {row.leaveDays}
                       </td>
-                      <td className="py-2.5 px-2.5 text-center font-bold border-r border-slate-100 print:border-slate-800 print:border-r-0">
+                      <td className={`py-2.5 px-2.5 text-center font-bold border-r border-slate-100 ${printCellPadClass} print:font-normal`}>
                         <span
                           className={
                             row.evaluatedDays === 0
@@ -1380,36 +1395,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           {/* Print Only Signature Block */}
-          <div className="hidden print:block pt-10 px-4 pb-4 text-center text-xs text-slate-800 print:break-inside-avoid">
-            <div className="grid grid-cols-3 gap-6">
-              <div className="space-y-4">
-                <p className="leading-relaxed">ลงชื่อ........................................................</p>
+          <div className="hidden print:block pt-3 px-2 pb-0 text-center text-[9.5px] leading-tight text-black print:break-inside-avoid">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <p>ลงชื่อ........................................................</p>
                 <p className="font-semibold">(........................................................)</p>
-                <p className="text-[11px] text-slate-600">ผู้รายงาน / ผู้ดูแลระบบ</p>
-                <p className="text-[10px] text-slate-500">
-                  วันที่ ...... เดือน ..................... พ.ศ. ...........
-                </p>
+                <p>ผู้รายงาน / ผู้ดูแลระบบ</p>
+                <p className="text-[9px]">วันที่ ...... เดือน ..................... พ.ศ. ...........</p>
               </div>
-              <div className="space-y-4">
-                <p className="leading-relaxed">ลงชื่อ........................................................</p>
+              <div className="space-y-1.5">
+                <p>ลงชื่อ........................................................</p>
                 <p className="font-semibold">(........................................................)</p>
-                <p className="text-[11px] text-slate-600">หัวหน้าฝ่ายวิชาการ</p>
-                <p className="text-[10px] text-slate-500">
-                  วันที่ ...... เดือน ..................... พ.ศ. ...........
-                </p>
+                <p>หัวหน้าฝ่ายวิชาการ</p>
+                <p className="text-[9px]">วันที่ ...... เดือน ..................... พ.ศ. ...........</p>
               </div>
-              <div className="space-y-4">
-                <p className="leading-relaxed">ลงชื่อ........................................................</p>
+              <div className="space-y-1.5">
+                <p>ลงชื่อ........................................................</p>
                 <p className="font-semibold">({effectiveDirectorName})</p>
-                <p className="text-[11px] text-slate-800 font-bold">ผู้อำนวยการสถานศึกษา</p>
-                <p className="text-[10px] text-slate-500">
-                  วันที่ ...... เดือน ..................... พ.ศ. ...........
-                </p>
+                <p className="font-bold">ผู้อำนวยการสถานศึกษา</p>
+                <p className="text-[9px]">วันที่ ...... เดือน ..................... พ.ศ. ...........</p>
               </div>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Recharts Attendance Summary Section for Entire School by Semester */}
       <div className="bg-white rounded-3xl p-6 lg:p-7 border border-slate-100 shadow-xs space-y-6 no-print">

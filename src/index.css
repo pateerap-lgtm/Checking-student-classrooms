@@ -32,6 +32,35 @@
   th, td {
     border-color: #475569 !important;
   }
+  .print-bw-single-page,
+  .print-bw-single-page * {
+    color: #000000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  .print-bw-single-page table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    background: #ffffff !important;
+  }
+  .print-bw-single-page th,
+  .print-bw-single-page td {
+    border: 1px solid #000000 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .print-bw-single-page thead th {
+    font-weight: 700 !important;
+    background: #ffffff !important;
+  }
+  .print-bw-single-page tbody tr {
+    background: #ffffff !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .print-bw-single-page img {
+    filter: grayscale(100%) contrast(1.15) !important;
+  }
 }
 
 @keyframes pulse-subtle {
