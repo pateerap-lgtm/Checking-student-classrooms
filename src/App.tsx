@@ -62,6 +62,8 @@ import { CurriculumsView } from './components/admin/CurriculumsView';
 import { SubjectsView } from './components/admin/SubjectsView';
 import { AssignmentsView } from './components/admin/AssignmentsView';
 import { CalendarView } from './components/admin/CalendarView';
+import { AdminDailyReportView } from './components/admin/AdminDailyReportView';
+import { AdminMonthlyReportView } from './components/admin/AdminMonthlyReportView';
 
 // Teacher Views
 import { TeacherDashboard } from './components/teacher/TeacherDashboard';
@@ -1421,9 +1423,8 @@ export default function App() {
                     />
                   )}
                   {currentTab === 'daily-report' && (
-                    <DirectorDailyReportView
+                    <AdminDailyReportView
                       classes={currentYearClasses}
-                      subjects={currentYearSubjects}
                       assignments={currentYearAssignments}
                       attendanceLogs={currentYearAttendanceLogs}
                       periods={currentYearPeriods}
@@ -1436,10 +1437,10 @@ export default function App() {
                     />
                   )}
                   {currentTab === 'monthly-report' && (
-                    <DirectorMonthlyReportView
-                      classes={currentYearClasses}
-                      subjects={currentYearSubjects}
+                    <AdminMonthlyReportView
+                      assignments={currentYearAssignments}
                       attendanceLogs={currentYearAttendanceLogs}
+                      periods={currentYearPeriods}
                       students={currentYearStudents}
                       teachers={users.filter((u) => u.role === 'teacher')}
                       allUsers={users}
